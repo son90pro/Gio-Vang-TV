@@ -13,7 +13,7 @@ TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-        " like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        " like Gecko) Chrome/124.0.0.0 Safari/537.36"
     ),
     "Referer": "https://giovang.rent/",
     "Accept": "application/json, text/plain, */*",
@@ -74,27 +74,29 @@ def detect_sport(sport_type, league_name="", team_name=""):
     return (99, "Thể Thao Khác")
 
 
-def fetch_url(url):
+def fetch_url(url, timeout=12):
     sep = "&" if "?" in url else "?"
     full_url = f"{url}{sep}t={int(time.time())}"
     req = urllib.request.Request(full_url, headers=HEADERS)
     try:
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            return resp.read().decode("utf-8")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            text = resp.read().decode("utf-8", errors="ignore")
+            # Tối quan trọng: Khôi phục URL bị escape slash trong JSON (https:\/\/ -> https://)
+            return text.replace("\\/", "/")
     except Exception:
         return None
 
 
 def fetch_detail_api(match_id):
     url = f"https://live-api.keonhacaitp.one/storage/livestream/detail/{match_id}.json"
-    raw = fetch_url(url)
+    raw = fetch_url(url, timeout=10)
     return match_id, raw
 
 
 def extract_stream_link(match, detail_raw=None):
-    """Trích xuất mã room_id dạng số hoặc link m3u8 chuẩn từ Detail API"""
+    """Trích xuất link vcdn.cloud hoặc .m3u8 thực tế"""
     if detail_raw:
-        # 1. Tìm trực tiếp các đường dẫn .m3u8 thực tế
+        # 1. Tìm trực tiếp URL m3u8 trong chuỗi phản hồi đã làm sạch
         m3u8_matches = re.findall(r'https?://[^\s"\'\>]+?\.m3u8', detail_raw)
         for m_url in m3u8_matches:
             if "no-signal" not in m_url:
@@ -139,7 +141,7 @@ def extract_stream_link(match, detail_raw=None):
                         ):
                             return l
 
-                # 2. Tìm room_id dạng số nguyên (ví dụ: 1790862754)
+                # 2. Tìm room_id dạng số nguyên (VD: 1790862754)
                 for k in [
                     "room_id",
                     "stream_id",
@@ -155,14 +157,14 @@ def extract_stream_link(match, detail_raw=None):
         except Exception:
             pass
 
-    # 3. Kiểm tra thuộc tính room_id có sẵn trong đối tượng trận đấu
+    # 3. Kiểm tra room_id từ chính match object
     for k in ["room_id", "stream_id", "live_id", "room"]:
         v = match.get(k)
         if v and str(v).isdigit() and len(str(v)) >= 6:
             rid = str(v).strip()
             return f"https://ftlh5sc02iliv.vcdn.cloud/{rid}_hd/{rid}_hd@720p.m3u8"
 
-    # 4. Link dự phòng chuẩn cho các trận chưa có tín hiệu live
+    # 4. Tín hiệu dự phòng khi chưa đến giờ đá
     return "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 
@@ -178,7 +180,7 @@ def main():
     d_yes_1 = yesterday_vn.strftime("%d-%m-%Y")
     d_yes_2 = yesterday_vn.strftime("%Y-%m-%d")
 
-    # Quét tất cả nguồn API chứa trận đấu Đang diễn ra & Sắp diễn ra
+    # Danh sách API tổng hợp tất cả trận đấu
     api_sources = [
         "https://live-api.keonhacaitp.one/storage/livestream/live.json",
         "https://live-api.keonhacaitp.one/storage/livestream/home.json",
@@ -194,7 +196,8 @@ def main():
 
     all_matches_dict = {}
 
-    # 1. Tải danh sách trận đấu đa luồng siêu tốc
+    # 1. Tải danh sách trận đấu đa luồng
+    print("[1/5] Đang quét dữ liệu từ các API nguồn...")
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_url = {
             executor.submit(fetch_url, url): url for url in api_sources
@@ -204,21 +207,27 @@ def main():
             if raw_text:
                 try:
                     data = json.loads(raw_text)
-                    items = data.get("response") or data.get("data") or []
+                    items = (
+                        data.get("response")
+                        or data.get("data")
+                        or (data if isinstance(data, list) else [])
+                    )
                     if isinstance(items, list):
                         for item in items:
-                            m_id = (
-                                item.get("id")
-                                or item.get("fi")
-                                or item.get("room_id")
-                            )
-                            if m_id and m_id not in all_matches_dict:
-                                all_matches_dict[m_id] = item
+                            if isinstance(item, dict):
+                                m_id = (
+                                    item.get("id")
+                                    or item.get("fi")
+                                    or item.get("room_id")
+                                )
+                                if m_id and m_id not in all_matches_dict:
+                                    all_matches_dict[m_id] = item
                 except Exception:
                     pass
 
-    # 2. Bổ sung trận đấu từ HTML giovang.rent
-    html_content = fetch_url("https://giovang.rent/")
+    # 2. Cào dữ liệu trực tiếp từ Giovang.rent HTML
+    print("[2/5] Đang cào dữ liệu từ Giovang.rent...")
+    html_content = fetch_url("https://giovang.rent/", timeout=15)
     if html_content:
         json_matches = re.findall(
             r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
@@ -228,17 +237,30 @@ def main():
         if json_matches:
             try:
                 data = json.loads(json_matches[0])
-                page_props = (
-                    data.get("props", {}).get("pageProps", {}).get("matches", [])
-                )
-                for item in page_props:
-                    m_id = item.get("id") or item.get("fi") or item.get("room_id")
-                    if m_id and m_id not in all_matches_dict:
-                        all_matches_dict[m_id] = item
+                page_props = data.get("props", {}).get("pageProps", {})
+
+                # Lấy từ tất cả các mảng dữ liệu có thể có
+                candidates = []
+                for key in ["matches", "schedules", "liveMatches", "homeData"]:
+                    val = page_props.get(key, [])
+                    if isinstance(val, list):
+                        candidates.extend(val)
+
+                for item in candidates:
+                    if isinstance(item, dict):
+                        m_id = (
+                            item.get("id")
+                            or item.get("fi")
+                            or item.get("room_id")
+                        )
+                        if m_id and m_id not in all_matches_dict:
+                            all_matches_dict[m_id] = item
             except Exception:
                 pass
 
-    # 3. Lọc danh sách: Chỉ loại bỏ các trận ĐÃ KẾT THÚC / ĐÃ HỦY
+    print(f"--> Tổng số trận cào được: {len(all_matches_dict)}")
+
+    # 3. Lọc danh sách: Chỉ bỏ trận ĐÃ KẾT THÚC / HỦY
     valid_matches = []
     for m_id, match in all_matches_dict.items():
         status_code = str(match.get("status_code", "")).upper()
@@ -252,7 +274,12 @@ def main():
             continue
         valid_matches.append(match)
 
+    print(
+        f"[3/5] Đã lọc còn {len(valid_matches)} trận đang & sắp diễn ra."
+    )
+
     # 4. Lấy chi tiết luồng phát cho từng trận đấu
+    print("[4/5] Đang giải mã luồng video trực tiếp...")
     detail_results = {}
     match_ids = [
         (m.get("id") or m.get("fi"))
@@ -260,7 +287,7 @@ def main():
         if (m.get("id") or m.get("fi"))
     ]
 
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=15) as executor:
         future_to_id = {
             executor.submit(fetch_detail_api, mid): mid for mid in match_ids
         }
@@ -269,12 +296,16 @@ def main():
             if raw:
                 detail_results[mid] = raw
 
-    # 5. Sắp xếp: Ưu tiên môn thể thao -> Trận LIVE lên đầu -> Thời gian
+    # 5. Sắp xếp: Môn thể thao -> Trận LIVE lên đầu -> Thời gian
     def sort_key(m):
         sport_prio, _ = detect_sport(
             m.get("type", ""),
-            m.get("league", {}).get("title", ""),
-            m.get("teams", {}).get("home", {}).get("name", ""),
+            m.get("league", {}).get("title", "")
+            if isinstance(m.get("league"), dict)
+            else "",
+            m.get("teams", {}).get("home", {}).get("name", "")
+            if isinstance(m.get("teams"), dict)
+            else "",
         )
         is_live = (
             0
@@ -287,23 +318,28 @@ def main():
     valid_matches.sort(key=sort_key)
 
     m3u_lines = ["#EXTM3U"]
+    live_count = 0
 
-    # 6. Tạo danh sách M3U chuẩn
+    # 6. Tạo danh sách M3U
     for match in valid_matches:
         sport_type = match.get("type", "")
-        league_title = match.get("league", {}).get("title", "")
+        league_obj = match.get("league")
+        league_title = league_obj.get("title", "") if isinstance(league_obj, dict) else ""
 
-        teams = match.get("teams", {})
-        home_name = teams.get("home", {}).get("name", "Đội nhà").strip()
-        away_name = teams.get("away", {}).get("name", "Đội khách").strip()
-        home_logo = teams.get("home", {}).get("logo", "")
+        teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
+        home_name = teams.get("home", {}).get("name", "Đội nhà").strip() if isinstance(teams.get("home"), dict) else "Đội nhà"
+        away_name = teams.get("away", {}).get("name", "Đội khách").strip() if isinstance(teams.get("away"), dict) else "Đội khách"
+        home_logo = teams.get("home", {}).get("logo", "") if isinstance(teams.get("home"), dict) else ""
 
         prio, group_title = detect_sport(sport_type, league_title, home_name)
 
         ts = match.get("time_start")
         if ts:
-            dt = datetime.datetime.fromtimestamp(ts, tz=TZ_VN)
-            time_str = dt.strftime("%H:%M %d/%m")
+            try:
+                dt = datetime.datetime.fromtimestamp(int(ts), tz=TZ_VN)
+                time_str = dt.strftime("%H:%M %d/%m")
+            except Exception:
+                time_str = "N/A"
         else:
             time_str = (
                 f"{match.get('time', '')} {match.get('day_month', '')}".strip()
@@ -311,7 +347,7 @@ def main():
             )
 
         blv_list = match.get("blv", [])
-        blv_str = f" ({', '.join(blv_list)})" if blv_list else ""
+        blv_str = f" ({', '.join(blv_list)})" if (isinstance(blv_list, list) and blv_list) else ""
 
         m_id = match.get("id") or match.get("fi")
         detail_raw = detail_results.get(m_id)
@@ -321,26 +357,24 @@ def main():
         is_live_match = (
             match.get("is_live")
             or str(match.get("status_code")).upper() == "LIVE"
+            or "no-signal" not in stream_url
         )
-        status_icon = "🟢 " if is_live_match else "🟡 "
+        
+        if "no-signal" not in stream_url:
+            live_count += 1
 
-        # Tiêu đề hiển thị chuẩn: 🟢 [22:00 01/10] U21 Hy Lạp vs U21 Latvia (BLV Hấu) [HD1]
-        title = (
-            f"{status_icon}[{time_str}] {home_name} vs {away_name}{blv_str} [HD1]"
-        )
+        status_icon = "🟢 " if is_live_match else "🟡 "
+        title = f"{status_icon}[{time_str}] {home_name} vs {away_name}{blv_str} [HD1]"
 
         m3u_lines.append(
-            f'#EXTINF:-1 tvg-logo="{home_logo}"'
-            f' group-title="{group_title}", {title}'
+            f'#EXTINF:-1 tvg-logo="{home_logo}" group-title="{group_title}", {title}'
         )
         m3u_lines.append(stream_url)
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(
-        f"==> Hoàn tất! Đã cập nhật {len(valid_matches)} trận đấu vào playlist.m3u"
-    )
+    print(f"[5/5] Hoàn tất! Đã cập nhật tổng cộng {len(valid_matches)} trận ({live_count} trận có luồng video trực tiếp).")
 
 
 if __name__ == "__main__":
