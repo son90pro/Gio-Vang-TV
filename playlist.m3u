@@ -1,25 +1,13 @@
 #EXTM3U
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/maldives.png" group-title="Bóng Đá",[21:00 01/10] Maldives vs Liban (Giao hữu quốc tế) [BLV: blv-18] - [LIVE] [HD1]
-#EXTVLCOPT:http-referrer=https://giovang.rent/
-#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0
-https://live-api.keonhacaitp.one/live/6ab70be464cdca71b70d752a.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0%20%28Android%2016%3B%20Mobile%3B%20rv%3A156.0%29%20Gecko/156.0%20Firefox/156.0
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/greece-u21.png" group-title="Bóng Đá",[22:00 01/10] U21 Hy Lạp vs U21 Latvia (VCK U21 Châu Âu) [BLV: blvhau] - [LIVE] [HD1]
-#EXTVLCOPT:http-referrer=https://giovang.rent/
-#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0
-https://live-api.keonhacaitp.one/live/683f8cbd5d282c5198021ebb.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0%20%28Android%2016%3B%20Mobile%3B%20rv%3A156.0%29%20Gecko/156.0%20Firefox/156.0
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/guinea.png" group-title="Bóng Đá",[23:00 01/10] Guinea vs Kenya (Africa Cup of Nations) [BLV: blv-18] - [LIVE] [HD1]
-#EXTVLCOPT:http-referrer=https://giovang.rent/
-#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0
-https://live-api.keonhacaitp.one/live/6a35da18dbc86fdf90016039.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0%20%28Android%2016%3B%20Mobile%3B%20rv%3A156.0%29%20Gecko/156.0%20Firefox/156.0
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/azerbaijan.png" group-title="Bóng Đá",[23:00 01/10] Azerbaijan vs Liechtenstein (UEFA Nations League) [BLV: blv-sup] - [LIVE] [HD1]
-#EXTVLCOPT:http-referrer=https://giovang.rent/
-#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0
-https://live-api.keonhacaitp.one/live/69f3f2b74bff4a0c310bf790.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0%20%28Android%2016%3B%20Mobile%3B%20rv%3A156.0%29%20Gecko/156.0%20Firefox/156.0
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/north-macedonia-u21.png" group-title="Bóng Đá",[23:00 01/10] U21 FYR Macedonia vs U21 Montenegro (VCK U21 Châu Âu) [BLV: blv-mason] - [LIVE] [HD1]
-#EXTVLCOPT:http-referrer=https://giovang.rent/
-#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0
-https://live-api.keonhacaitp.one/live/683ce9d16fa477d4b303700d.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0%20%28Android%2016%3B%20Mobile%3B%20rv%3A156.0%29%20Gecko/156.0%20Firefox/156.0
-#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/3cf0f296f43dd0a1184d339fd24c97af.png" group-title="Bóng Rổ",[23:00 01/10] Hapoel Tel-Aviv vs Real Madrid Teka (EURO) [BLV: blv-diec] - [LIVE] [HD1]
-#EXTVLCOPT:http-referrer=https://giovang.rent/
-#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0
-https://live-api.keonhacaitp.one/live/39292271.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0%20%28Android%2016%3B%20Mobile%3B%20rv%3A156.0%29%20Gecko/156.0%20Firefox/156.0
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/maldives.png" group-title="Bóng Đá", [21:00 01/10] Maldives vs Liban (blv-18) [HD1]
+https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/greece-u21.png" group-title="Bóng Đá", [22:00 01/10] U21 Hy Lạp vs U21 Latvia (blvhau) [HD1]
+https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/guinea.png" group-title="Bóng Đá", [23:00 01/10] Guinea vs Kenya (blv-18) [HD1]
+https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/azerbaijan.png" group-title="Bóng Đá", [23:00 01/10] Azerbaijan vs Liechtenstein (blv-sup) [HD1]
+https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/north-macedonia-u21.png" group-title="Bóng Đá", [23:00 01/10] U21 FYR Macedonia vs U21 Montenegro (blv-mason) [HD1]
+https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/3cf0f296f43dd0a1184d339fd24c97af.png" group-title="Bóng Rổ", [23:00 01/10] Hapoel Tel-Aviv vs Real Madrid Teka (blv-diec) [HD1]
+https://freem3u.xyz/static/no-signal/low.m3u8
