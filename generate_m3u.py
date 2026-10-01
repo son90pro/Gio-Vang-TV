@@ -8,7 +8,6 @@ import urllib.request
 import zoneinfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Múi giờ Việt Nam (GMT+7)
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
 HEADERS = {
@@ -28,7 +27,7 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 def get_sport_emoji(sport_type, league="", team=""):
-    """Tự động phân loại icon môn thể thao chuẩn như mẫu M3U"""
+    """Phân loại icon môn thể thao chuẩn mẫu M3U"""
     s = f"{sport_type} {league} {team}".lower()
     if any(
         k in s
@@ -51,7 +50,7 @@ def get_sport_emoji(sport_type, league="", team=""):
             "bóng chày",
             "braves",
             "phillies",
-            "IPmhSoEa-hvtJM6zJ",
+            "ipmhsoe-hvtjm6zj",
         ]
     ):
         return "⚾"
@@ -128,9 +127,11 @@ def fetch_url(url, timeout=12):
 
 
 def extract_room_id(match):
-    """Bắt chính xác room_id từ mọi cấu trúc JSON của Giờ Vàng"""
-    match_str = json.dumps(match)
+    """Trích xuất ID phòng phát sóng trực tiếp từ dữ liệu Giờ Vàng"""
+    if not isinstance(match, dict):
+        return None
 
+    # Tìm trực tiếp từ các key phổ biến
     for key in [
         "room_id",
         "room_num",
@@ -144,6 +145,7 @@ def extract_room_id(match):
         if val and str(val).isdigit() and len(str(val)) >= 6:
             return str(val).strip()
 
+    # Tìm trong danh sách máy chủ/kênh con
     for sub_key in ["servers", "channels", "links", "sources", "streams"]:
         sub_list = match.get(sub_key)
         if isinstance(sub_list, list):
@@ -154,6 +156,8 @@ def extract_room_id(match):
                         if v and str(v).isdigit() and len(str(v)) >= 6:
                             return str(v).strip()
 
+    # Regex quét chuỗi JSON
+    match_str = json.dumps(match)
     room_matches = re.findall(
         r'"(?:room_id|stream_id|live_id|room_num|room)"\s*:\s*"?(\d{6,11})"?',
         match_str,
@@ -165,28 +169,40 @@ def extract_room_id(match):
 
 
 def extract_stream_link(match):
-    """Trích xuất luồng vcdn trực tiếp hoặc no-signal chuẩn"""
-    status_code = str(match.get("status_code", "")).upper()
-    status_str = str(match.get("status", "")).upper()
-    is_live = (
-        match.get("is_live") == 1
-        or match.get("is_live") is True
-        if "is_live" in match
-        else False
-    )
+    """Trả về đường dẫn video trực tiếp VCDN chuẩn 100%"""
+    # 1. Kiểm tra link .m3u8 trực tiếp nếu có sẵn trong JSON
+    for key in ["link", "m3u8", "stream_url", "play_url", "url", "hls", "src"]:
+        val = match.get(key)
+        if (
+            isinstance(val, str)
+            and ".m3u8" in val
+            and val.startswith("http")
+            and "no-signal" not in val
+        ):
+            return val.strip()
 
+    # 2. Kiểm tra trong mảng kênh/server phụ
+    for sub_key in ["servers", "channels", "links", "sources", "streams"]:
+        sub_list = match.get(sub_key)
+        if isinstance(sub_list, list):
+            for item in sub_list:
+                if isinstance(item, dict):
+                    for k in ["link", "m3u8", "url", "src"]:
+                        v = item.get(k)
+                        if (
+                            isinstance(v, str)
+                            and ".m3u8" in v
+                            and v.startswith("http")
+                            and "no-signal" not in v
+                        ):
+                            return v.strip()
+
+    # 3. Lấy room_id để dựng link vcdn trực tiếp
     room_id = extract_room_id(match)
-
-    # Nếu trận đấu đang LIVE hoặc có room_id phát trực tiếp
-    if (
-        is_live or status_code in ["LIVE", "1"] or "ĐANG LIVE" in status_str
-    ) and room_id:
+    if room_id:
         return f"https://ftlh5sc02iliv.vcdn.cloud/{room_id}_hd/{room_id}_hd@720p.m3u8"
 
-    if room_id and is_live:
-        return f"https://ftlh5sc02iliv.vcdn.cloud/{room_id}_hd/{room_id}_hd@720p.m3u8"
-
-    # Trận chưa diễn ra
+    # 4. Chỉ khi hoàn toàn không tìm thấy ID mới dùng link dự phòng
     return "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 
@@ -261,7 +277,7 @@ def main():
 
     all_matches_dict = {}
 
-    # 1. Cào API
+    # Cào nguồn API
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_url = {
             executor.submit(fetch_url, url): url for url in api_sources
@@ -290,7 +306,7 @@ def main():
                 except Exception:
                     pass
 
-    # 2. Cào Trang chủ HTML Giờ Vàng
+    # Cào web HTML
     with ThreadPoolExecutor(max_workers=5) as executor:
         future_to_url = {
             executor.submit(fetch_url, url): url for url in web_sources
@@ -309,7 +325,7 @@ def main():
                     if m_id and m_id not in all_matches_dict:
                         all_matches_dict[m_id] = item
 
-    # 3. Lọc lấy các trận đang và sắp diễn ra
+    # Lọc bỏ các trận đã kết thúc
     valid_matches = []
     for m_id, match in all_matches_dict.items():
         status_code = str(match.get("status_code", "")).upper()
@@ -324,13 +340,9 @@ def main():
         valid_matches.append(match)
 
     def sort_key(m):
-        is_live = (
-            0
-            if (m.get("is_live") or str(m.get("status_code")).upper() == "LIVE")
-            else 1
-        )
         ts = m.get("time_start") or 0
-        return (is_live, ts)
+        has_room = 0 if extract_room_id(m) else 1
+        return (has_room, ts)
 
     valid_matches.sort(key=sort_key)
 
@@ -396,10 +408,7 @@ def main():
         stream_url = extract_stream_link(match)
         is_no_signal = "no-signal" in stream_url
 
-        if not is_no_signal:
-            status_icon = "🟢 "
-        else:
-            status_icon = "🟡 " if "07:00" in time_str or "05:00" in time_str else ""
+        status_icon = "🟢 " if not is_no_signal else "🟡 "
 
         title = f"{status_icon}{time_str} {emoji} {match_name}{blv_str} [hls]"
 
@@ -413,8 +422,7 @@ def main():
         f.write("\n".join(m3u_lines))
 
     print(
-        f"Hoàn tất! Đã tạo playlist.m3u chuẩn với {len(valid_matches)} trận"
-        " đấu.",
+        f"Hoàn tất! Đã tạo playlist.m3u với {len(valid_matches)} trận đấu.",
         flush=True,
     )
 
