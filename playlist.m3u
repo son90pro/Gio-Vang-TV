@@ -1,9 +1,13 @@
 #EXTM3U
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/indonesia.png" group-title="Bóng Đá",[19:30 01/10] Indonesia vs Bangladesh (FIFA ASEAN Cup) [BLV: blv-beo] - [Đang diễn ra]
-https://giovang.rent/live/6ab468f8b057b828a8092bd0
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/malaysia.png" group-title="Bóng Đá",[19:30 01/10] Malaysia vs Singapore (FIFA ASEAN Cup) [BLV: blv-sup] - [Đang diễn ra]
-https://giovang.rent/live/6ab468f8b057b828a8092bd1
-#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTADC3pRGirDoA1eaQtvYds8PQ-vmcEESiPHvywMVtvYU3ERTP__FyL8m8F&s=10" group-title="Quần Vợt",[10:00 01/10] Beijing Open vs 2026 (ATP Beijing Open) [BLV: blv-ben] - [Đang diễn ra]
-https://giovang.rent/live/wcw23uj5ldtg
-#EXTINF:-1 tvg-logo="https://liquipedia.net/commons/images/thumb/7/74/XLG_China_allmode.png/285px-XLG_China_allmode.png" group-title="Esports",[19:00 01/10] XLG vs Nongsim Redforce (VCT Champions) [BLV: mickey] - [Đang diễn ra]
-https://giovang.rent/live/hfxarlqzq8an
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/maldives.png" group-title="Bóng Đá",[21:00 01/10] Maldives vs Liban (Giao hữu quốc tế) [BLV: blv-18] - [LIVE] [HD1]
+#EXTVLCOPT:http-referrer=https://giovang.rent/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0
+https://live-api.keonhacaitp.one/live/6ab70be464cdca71b70d752a.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0%20%28Android%2016%3B%20Mobile%3B%20rv%3A156.0%29%20Gecko/156.0%20Firefox/156.0
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/greece-u21.png" group-title="Bóng Đá",[22:00 01/10] U21 Hy Lạp vs U21 Latvia (VCK U21 Châu Âu) [BLV: blvhau] - [LIVE] [HD1]
+#EXTVLCOPT:http-referrer=https://giovang.rent/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0
+https://live-api.keonhacaitp.one/live/683f8cbd5d282c5198021ebb.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0%20%28Android%2016%3B%20Mobile%3B%20rv%3A156.0%29%20Gecko/156.0%20Firefox/156.0
+#EXTINF:-1 tvg-logo="https://liquipedia.net/commons/images/thumb/7/74/XLG_China_allmode.png/285px-XLG_China_allmode.png" group-title="Esports",[19:00 01/10] XLG vs Nongsim Redforce (VCT Champions) [BLV: mickey] - [LIVE] [HD1]
+#EXTVLCOPT:http-referrer=https://giovang.rent/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0
+https://live-api.keonhacaitp.one/live/hfxarlqzq8an.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0%20%28Android%2016%3B%20Mobile%3B%20rv%3A156.0%29%20Gecko/156.0%20Firefox/156.0
