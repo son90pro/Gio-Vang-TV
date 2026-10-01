@@ -11,15 +11,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Múi giờ Việt Nam (GMT+7)
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
+# Header chuẩn giả lập trình duyệt để cào web & gắn vào M3U
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+REFERER = "https://giovang.rent/"
+
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-        " like Gecko) Chrome/128.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": USER_AGENT,
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
     "Origin": "https://giovang.rent",
-    "Referer": "https://giovang.rent/",
+    "Referer": REFERER,
 }
 
 SSL_CTX = ssl.create_default_context()
@@ -130,7 +131,6 @@ def fetch_url(url, timeout=12):
 def find_vcdn_stream_url(obj):
     """Quét đệ quy sâu lấy luồng VCDN hoặc ID phòng 10 chữ số"""
     if isinstance(obj, str):
-        # 1. Nếu tìm thấy đường dẫn m3u8 vcdn trực tiếp
         if "vcdn.cloud" in obj or (
             ".m3u8" in obj and "no-signal" not in obj and "http" in obj
         ):
@@ -138,7 +138,6 @@ def find_vcdn_stream_url(obj):
             if m:
                 return m.group(0)
 
-        # 2. Bắt chuỗi ID 10 chữ số của Giờ Vàng (ví dụ: 1790840397)
         m_id = re.search(r"\b(1\d{8,10})\b", obj)
         if m_id:
             rid = m_id.group(1)
@@ -152,7 +151,6 @@ def find_vcdn_stream_url(obj):
             return f"https://ftlh5sc02iliv.vcdn.cloud/{s_obj}_hd/{s_obj}_hd@720p.m3u8"
 
     elif isinstance(obj, dict):
-        # Kiểm tra các key ưu tiên stream/link
         for k in [
             "link",
             "url",
@@ -173,7 +171,6 @@ def find_vcdn_stream_url(obj):
                 if res and "no-signal" not in res:
                     return res
 
-        # Quét tất cả thuộc tính trong dictionary
         for v in obj.values():
             res = find_vcdn_stream_url(v)
             if res and "no-signal" not in res:
@@ -283,7 +280,7 @@ def main():
                                     or item.get("slug")
                                     or item.get("title")
                                 )
-                                if m_id and m_id not in all_matches_dict:
+                                if m_id and str(m_id) not in all_matches_dict:
                                     all_matches_dict[str(m_id)] = item
                 except Exception:
                     pass
@@ -394,21 +391,33 @@ def main():
         is_no_signal = "no-signal" in stream_url
 
         status_icon = "🟢 " if not is_no_signal else "🟡 "
-
         title = f"{status_icon}{time_str} {emoji} {match_name}{blv_str} [hls]"
 
+        # Ghi thẻ #EXTINF hỗ trợ TiviMate gắn User-Agent & Referer
         m3u_lines.append(
-            f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}'
+            f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" http-user-agent="{USER_AGENT}" http-referrer="{REFERER}", {title}'
         )
-        m3u_lines.append(stream_url)
+        m3u_lines.append(
+            f'#EXTVLCOPT:http-user-agent={USER_AGENT}'
+        )
+        m3u_lines.append(
+            f'#EXTVLCOPT:http-referrer={REFERER}'
+        )
+
+        # Gắn thêm tham số Header vào cuối URL (TiviMate Pipe syntax)
+        if not is_no_signal:
+            final_url = f"{stream_url}|User-Agent={USER_AGENT}&Referer={REFERER}"
+        else:
+            final_url = stream_url
+
+        m3u_lines.append(final_url)
         m3u_lines.append("")
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
     print(
-        f"Hoàn tất! Đã tạo playlist.m3u chuẩn với {len(valid_matches)} trận"
-        " đấu.",
+        f"Hoàn tất! Đã tạo playlist.m3u chuẩn kèm Header cho {len(valid_matches)} trận đấu.",
         flush=True,
     )
 
