@@ -17,7 +17,7 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
 }
 
-# Phân loại & Thứ tự ưu tiên hiển thị Môn Thể Thao
+# Bản đồ phân loại môn thể thao & Thứ tự ưu tiên
 SPORT_MAP = {
     "football": (1, "Bóng Đá"),
     "soccer": (1, "Bóng Đá"),
@@ -77,78 +77,39 @@ def fetch_data(url):
     full_url = f"{url}{sep}t={int(time.time())}"
     req = urllib.request.Request(full_url, headers=HEADERS)
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=8) as resp:
             return resp.read().decode("utf-8")
     except Exception:
         return None
 
 
-def extract_stream_info(match):
-    """Trích xuất luồng m3u8 thực tế hoặc tạo luồng CDN vcdn.cloud chuẩn"""
-    streams = []
-    candidate_ids = []
+def resolve_stream_url(match):
+    """Tạo trực tiếp URL vcdn.cloud tốc độ cao không qua request trung gian"""
+    # 1. Kiểm tra nếu có sẵn play_url hoặc links trong API
+    if match.get("play_url") and "http" in str(match.get("play_url")):
+        return str(match["play_url"])
 
-    # 1. Tìm các ID khả nghi (8 - 10 chữ số) trong đối tượng trận đấu
-    for key in [
-        "room_id",
-        "stream_id",
-        "live_id",
-        "room_num",
-        "room",
-        "id",
-        "fi",
-    ]:
+    links = match.get("links") or match.get("play_urls") or []
+    if isinstance(links, list):
+        for item in links:
+            if isinstance(item, dict):
+                u = item.get("url") or item.get("link") or item.get("m3u8")
+                if u and "http" in str(u):
+                    return str(u)
+            elif isinstance(item, str) and "http" in item:
+                return item
+
+    # 2. Ưu tiên trích xuất ID phòng phát (room_id, stream_id, live_id, fi, id)
+    for key in ["room_id", "stream_id", "live_id", "room", "fi", "id"]:
         val = match.get(key)
-        if val and str(val).isdigit():
+        if val and str(val).strip().isdigit():
             val_str = str(val).strip()
-            if len(val_str) >= 6:
-                candidate_ids.append(val_str)
+            if len(val_str) >= 5:
+                return f"https://ftlh5sc02iliv.vcdn.cloud/{val_str}_hd/{val_str}_hd@720p.m3u8"
 
-    match_id = match.get("id") or match.get("fi") or (candidate_ids[0] if candidate_ids else None)
-
-    # 2. Thử truy vấn Detail API với match_id và room_id
-    detail_urls = []
-    if match_id:
-        detail_urls.append(
-            f"https://live-api.keonhacaitp.one/storage/livestream/detail/{match_id}.json"
-        )
-    for c_id in candidate_ids:
-        url_c = f"https://live-api.keonhacaitp.one/storage/livestream/detail/{c_id}.json"
-        if url_c not in detail_urls:
-            detail_urls.append(url_c)
-
-    for d_url in detail_urls:
-        raw = fetch_data(d_url)
-        if raw:
-            # Tìm link .m3u8 trực tiếp trong text phản hồi bằng Regex
-            m3u8_matches = re.findall(r"https?://[^\s\"'\>]+?\.m3u8", raw)
-            for m_url in m3u8_matches:
-                if m_url not in [s[1] for s in streams]:
-                    streams.append(("HD1", m_url))
-
-            # Tìm ID phòng livestream trong dữ liệu Detail
-            try:
-                data = json.loads(raw)
-                resp = data.get("response", {})
-                if isinstance(resp, dict):
-                    for k in ["room_id", "stream_id", "live_id", "id"]:
-                        v = resp.get(k)
-                        if v and str(v).isdigit() and str(v) not in candidate_ids:
-                            candidate_ids.insert(0, str(v))
-            except Exception:
-                pass
-
-    # 3. Dựng đường dẫn CDN vcdn.cloud chuẩn (dạng ftlh5sc02iliv.vcdn.cloud/{ID}_hd/...)
-    if candidate_ids:
-        # Ưu tiên các ID có độ dài từ 8 - 10 chữ số (chuẩn ID phòng live)
-        best_id = next((i for i in candidate_ids if len(i) >= 8), candidate_ids[0])
-        vcdn_url = f"https://ftlh5sc02iliv.vcdn.cloud/{best_id}_hd/{best_id}_hd@720p.m3u8"
-        
-        # Thêm luồng vcdn nếu chưa có trong danh sách
-        if vcdn_url not in [s[1] for s in streams]:
-            streams.insert(0, ("HD1", vcdn_url))
-
-    return streams
+    # 3. Mặc định fallback ID
+    m_id = match.get("id") or match.get("fi") or "0"
+    return f"https://ftlh5sc02iliv.vcdn.cloud/{m_id}_hd/{m_id}_hd@720p.m3u8"
 
 
 def main():
@@ -160,6 +121,7 @@ def main():
     d_tom_1 = tomorrow_vn.strftime("%d-%m-%Y")
     d_tom_2 = tomorrow_vn.strftime("%Y-%m-%d")
 
+    # Các nguồn API quét toàn bộ trận đấu Hôm nay và Ngày mai
     api_sources = [
         "https://live-api.keonhacaitp.one/storage/livestream/live.json",
         "https://live-api.keonhacaitp.one/storage/livestream/home.json",
@@ -173,7 +135,7 @@ def main():
 
     all_matches_dict = {}
 
-    # 1. Quét dữ liệu từ các API JSON
+    # 1. Quét API JSON
     for url in api_sources:
         raw_text = fetch_data(url)
         if raw_text:
@@ -188,7 +150,7 @@ def main():
             except Exception:
                 pass
 
-    # 2. Quét dữ liệu trực tiếp từ trang web giovang.rent
+    # 2. Quét HTML dự phòng từ giovang.rent
     html_content = fetch_data("https://giovang.rent/")
     if html_content:
         json_matches = re.findall(
@@ -241,7 +203,7 @@ def main():
 
     m3u_lines = ["#EXTM3U"]
 
-    # 5. Xuất danh sách M3U
+    # 5. Xuất danh sách M3U chuẩn
     for match in valid_matches:
         sport_type = match.get("type", "")
         league_title = match.get("league", {}).get("title", "")
@@ -253,7 +215,6 @@ def main():
 
         prio, group_title = detect_sport(sport_type, league_title, home_name)
 
-        # Định dạng thời gian GMT+7
         ts = match.get("time_start")
         if ts:
             dt = datetime.datetime.fromtimestamp(ts, tz=TZ_VN)
@@ -267,20 +228,16 @@ def main():
         blv_list = match.get("blv", [])
         blv_str = f" ({', '.join(blv_list)})" if blv_list else ""
 
-        # Lấy luồng phát m3u8
-        streams = extract_stream_info(match)
+        stream_url = resolve_stream_url(match)
 
-        for quality, stream_url in streams:
-            # Tiêu đề hiển thị chuẩn gọn: [22:00 01/10] U21 Hy Lạp vs U21 Latvia (BLV Hấu) [HD1]
-            title = (
-                f"[{time_str}] {home_name} vs {away_name}{blv_str} [{quality}]"
-            )
+        # Định dạng tên rút gọn: [22:00 01/10] U21 Hy Lạp vs U21 Latvia (BLV Hấu) [HD1]
+        title = f"[{time_str}] {home_name} vs {away_name}{blv_str} [HD1]"
 
-            m3u_lines.append(
-                f'#EXTINF:-1 tvg-logo="{home_logo}"'
-                f' group-title="{group_title}", {title}'
-            )
-            m3u_lines.append(stream_url)
+        m3u_lines.append(
+            f'#EXTINF:-1 tvg-logo="{home_logo}"'
+            f' group-title="{group_title}", {title}'
+        )
+        m3u_lines.append(stream_url)
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
