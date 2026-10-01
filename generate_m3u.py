@@ -3,27 +3,25 @@ import json
 import re
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 import zoneinfo
 
 # Múi giờ Việt Nam (GMT+7)
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
-# Thông tin Request Header
-REFERER_URL = "https://giovang.rent/"
-USER_AGENT = (
-    "Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0"
-)
-
+# Header gửi request lấy dữ liệu API
 HEADERS = {
-    "User-Agent": USER_AGENT,
-    "Referer": REFERER_URL,
+    "User-Agent": (
+        "Mozilla/5.0 (Android 16; Mobile; rv:156.0) Gecko/156.0 Firefox/156.0"
+    ),
+    "Referer": "https://giovang.rent/",
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-# Phân loại & Thứ tự ưu tiên hiển thị Môn Thể Thao
+# Link m3u8 dự phòng khi trận đấu chưa diễn ra (giống danh sách mẫu)
+NO_SIGNAL_URL = "https://freem3u.xyz/static/no-signal/low.m3u8"
+
+# Phân loại & Thứ tự ưu tiên môn thể thao
 SPORT_MAP = {
     "football": (1, "Bóng Đá"),
     "soccer": (1, "Bóng Đá"),
@@ -83,14 +81,14 @@ def fetch_data(url):
     full_url = f"{url}{sep}t={int(time.time())}"
     req = urllib.request.Request(full_url, headers=HEADERS)
     try:
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             return resp.read().decode("utf-8")
-    except Exception as e:
+    except Exception:
         return None
 
 
 def get_direct_stream_urls(match_id):
-    """Lấy link .m3u8 trực tiếp từ Detail API"""
+    """Bóc tách luồng vcdn.cloud trực tiếp từ Detail API"""
     detail_url = (
         f"https://live-api.keonhacaitp.one/storage/livestream/detail/{match_id}.json"
     )
@@ -117,16 +115,17 @@ def get_direct_stream_urls(match_id):
                                     or item.get("link")
                                     or item.get("m3u8")
                                 )
-                                if s_url and "http" in s_url:
+                                if s_url and ".m3u8" in s_url:
                                     streams.append((q_name, s_url))
-                            elif isinstance(item, str) and "http" in item:
+                            elif isinstance(item, str) and ".m3u8" in item:
                                 streams.append((f"HD{idx+1}", item))
 
                     if not streams and resp.get("play_url"):
-                        streams.append(("FHD", resp["play_url"]))
+                        play_u = resp["play_url"]
+                        if ".m3u8" in play_u:
+                            streams.append(("FHD", play_u))
         except Exception:
             pass
-
     return streams
 
 
@@ -134,13 +133,12 @@ def main():
     now_vn = datetime.datetime.now(TZ_VN)
     tomorrow_vn = now_vn + datetime.timedelta(days=1)
 
-    # Định dạng ngày phục vụ quét API
-    d_today_1 = now_vn.strftime("%d-%m-%Y")  # 01-10-2026
-    d_today_2 = now_vn.strftime("%Y-%m-%d")  # 2026-10-01
-    d_tom_1 = tomorrow_vn.strftime("%d-%m-%Y")  # 02-10-2026
-    d_tom_2 = tomorrow_vn.strftime("%Y-%m-%d")  # 2026-10-02
+    d_today_1 = now_vn.strftime("%d-%m-%Y")
+    d_today_2 = now_vn.strftime("%Y-%m-%d")
+    d_tom_1 = tomorrow_vn.strftime("%d-%m-%Y")
+    d_tom_2 = tomorrow_vn.strftime("%Y-%m-%d")
 
-    # Danh sách tập hợp API quét toàn bộ lịch thi đấu
+    # Danh sách các API chứa toàn bộ lịch thi đấu Hôm nay & Ngày mai
     api_sources = [
         "https://live-api.keonhacaitp.one/storage/livestream/live.json",
         "https://live-api.keonhacaitp.one/storage/livestream/home.json",
@@ -154,7 +152,7 @@ def main():
 
     all_matches_dict = {}
 
-    # 1. Quét dữ liệu từ các API JSON
+    # 1. Quét dữ liệu từ các endpoint API
     for url in api_sources:
         raw_text = fetch_data(url)
         if raw_text:
@@ -169,7 +167,7 @@ def main():
             except Exception:
                 pass
 
-    # 2. Quét dự phòng trực tiếp từ HTML trang chủ giovang.rent
+    # 2. Quét HTML dự phòng từ giovang.rent
     html_content = fetch_data("https://giovang.rent/")
     if html_content:
         json_matches = re.findall(
@@ -190,25 +188,20 @@ def main():
             except Exception:
                 pass
 
-    print(f"Tổng số trận quét thành công: {len(all_matches_dict)}")
-
-    # 3. Lọc trận đấu (Bỏ trận đã đá xong)
+    # 3. Lọc trận đấu (Bỏ qua các trận đã kết thúc)
     valid_matches = []
     for m_id, match in all_matches_dict.items():
         status_code = str(match.get("status_code", "")).upper()
         status_str = str(match.get("status", "")).upper()
 
-        # Bỏ qua trận đã kết thúc
         if (
             status_code in ["FINISHED", "FT", "ENDED", "CANCELLED"]
             or "KẾT THÚC" in status_str
         ):
             continue
-
         valid_matches.append(match)
 
-    # 4. Sắp xếp ưu tiên:
-    # Môn thể thao (Bóng Đá -> Bóng Chuyền -> Bóng Rổ...) -> Trận LIVE -> Thời gian
+    # 4. Sắp xếp ưu tiên: Môn thể thao -> Trận LIVE -> Thời gian
     def sort_key(m):
         sport_prio, _ = detect_sport(
             m.get("type", ""),
@@ -231,7 +224,7 @@ def main():
     for match in valid_matches:
         match_id = match.get("id") or match.get("fi")
         sport_type = match.get("type", "")
-        league_title = match.get("league", {}).get("title", "Giải đấu")
+        league_title = match.get("league", {}).get("title", "")
 
         teams = match.get("teams", {})
         home_name = teams.get("home", {}).get("name", "Đội nhà").strip()
@@ -240,7 +233,7 @@ def main():
 
         prio, group_title = detect_sport(sport_type, league_title, home_name)
 
-        # Định dạng thời gian
+        # Định dạng thời gian GMT+7
         ts = match.get("time_start")
         if ts:
             dt = datetime.datetime.fromtimestamp(ts, tz=TZ_VN)
@@ -252,39 +245,33 @@ def main():
             )
 
         blv_list = match.get("blv", [])
-        blv_str = f" [BLV: {', '.join(blv_list)}]" if blv_list else ""
+        blv_str = f" ({', '.join(blv_list)})" if blv_list else ""
 
-        is_live = match.get("is_live") or (
-            str(match.get("status_code")).upper() == "LIVE"
-        )
-        status_tag = "LIVE" if is_live else "Sắp diễn ra"
-
-        # Lấy link m3u8
+        # Lấy luồng m3u8 vcdn trực tiếp
         streams = get_direct_stream_urls(match_id)
+
+        # Nếu trận sắp diễn ra chưa có luồng vcdn, gán luồng báo tín hiệu dự phòng
         if not streams:
-            streams.append(
-                ("HD1", f"https://live-api.keonhacaitp.one/live/{match_id}.m3u8")
+            streams.append(("HD1", NO_SIGNAL_URL))
+
+        for quality, stream_url in streams:
+            # Tiêu đề gọn gàng: [Giờ Ngày/Tháng] Đội A vs Đội B (BLV) [Chất lượng]
+            title = (
+                f"[{time_str}] {home_name} vs {away_name}{blv_str} [{quality}]"
             )
 
-        for quality, raw_url in streams:
-            title = f"[{time_str}] {home_name} vs {away_name} ({league_title}){blv_str} - [{status_tag}] [{quality}]"
-
+            # Xuất định dạng M3U thuần không chứa thẻ #EXTVLCOPT
             m3u_lines.append(
                 f'#EXTINF:-1 tvg-logo="{home_logo}"'
-                f' group-title="{group_title}",{title}'
+                f' group-title="{group_title}", {title}'
             )
-            m3u_lines.append(f"#EXTVLCOPT:http-referrer={REFERER_URL}")
-            m3u_lines.append(f"#EXTVLCOPT:http-user-agent={USER_AGENT}")
-
-            formatted_url = f"{raw_url}|Referer={REFERER_URL}&User-Agent={urllib.parse.quote(USER_AGENT)}"
-            m3u_lines.append(formatted_url)
+            m3u_lines.append(stream_url)
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
     print(
-        f"==> Hoàn tất! Đã xuất {len(valid_matches)} trận đấu (LIVE + Sắp diễn"
-        " ra) vào playlist.m3u"
+        f"==> Hoàn tất! Đã xuất {len(valid_matches)} trận đấu vào playlist.m3u"
     )
 
 
