@@ -274,8 +274,8 @@ def main():
         blv_list = match.get("blv", [])
         if isinstance(blv_list, list) and blv_list:
             blv_str = f" ({', '.join([str(b) for b in blv_list])})"
-        elif isinstance(blv_list, str) and blv_str := str(blv_list):
-            blv_str = f" ({blv_str})"
+        elif isinstance(blv_list, str) and blv_list.strip():
+            blv_str = f" ({blv_list.strip()})"
         else:
             blv_str = ""
 
