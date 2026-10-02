@@ -1,292 +1,127 @@
-import datetime
-import json
-import re
-import ssl
 import time
-import urllib.request
-import zoneinfo
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
 
-TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-        " like Gecko) Chrome/128.0.0.0 Safari/537.36"
-    ),
-    "Accept": "*/*",
-    "Referer": "https://giovang.co/",
-    "Origin": "https://giovang.co/",
+# Bảng ánh xạ icon môn thể thao theo type từ API
+SPORT_ICONS = {
+    "football": "⚽",
+    "bongda": "⚽",
+    "tennis": "🥎",
+    "esport": "🎮",
+    "bongchuyen": "🏐",
+    "volleyball": "🏐",
+    "billiards": "🎱",
+    "bida": "🎱",
+    "basketball": "🏀",
+    "bongro": "🏀",
+    "f1": "[formula1]",
+    "formula1": "[formula1]",
+    "mma": "🥊🥋",
+    "boxing": "🥊🥋",
 }
 
-SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
 
+def clean_blv_name(blv_list):
+    """Xử lý hiển thị tên BLV đúng định dạng mẫu"""
+    if not blv_list:
+        return ""
 
-def get_sport_emoji(sport_type="", league="", match_name=""):
-  s = f"{sport_type} {league} {match_name}".lower()
-  if any(k in s for k in ["basketball", "bóng rổ", "nba"]):
-    return "🏀"
-  if any(k in s for k in ["volleyball", "bóng chuyền"]):
-    return "🏐"
-  if any(
-      k in s for k in ["tennis", "quần vợt", "softball", "wta", "atp", "open"]
-  ):
-    return "🥎"
-  if any(
-      k in s
-      for k in ["esport", "esports", "lol", "dota", "valorant", "liên minh"]
-  ):
-    return "🎮"
-  if any(k in s for k in ["billiards", "bida", "bi a", "pool", "9-ball"]):
-    return "🎱"
-  if any(
-      k in s for k in ["f1", "formula1", "formula 1", "grand prix", "racing"]
-  ):
-    return "[formula1]"
-  if any(
-      k in s for k in ["mma", "one friday", "boxing", "ufc", "võ", "fights"]
-  ):
-    return "🥊"
-  return "⚽"
+    blv_str = blv_list[0] if isinstance(blv_list, list) else str(blv_list)
+    blv_str = blv_str.strip()
 
-
-def clean_blv_name(blv_raw):
-  if not blv_raw:
-    return ""
-  if isinstance(blv_raw, list):
-    blv_raw = blv_raw[0] if blv_raw else ""
-  if isinstance(blv_raw, dict):
-    blv_raw = (
-        blv_raw.get("name")
-        or blv_raw.get("nickname")
-        or blv_raw.get("title")
-        or blv_raw.get("blv_name")
-        or ""
-    )
-
-  name = str(blv_raw).strip()
-  if not name or name.lower() in ["none", "null", "undefined"]:
-    return ""
-
-  if name.startswith("(") and name.endswith(")"):
-    return f" {name}"
-
-  return f" ({name})"
-
-
-def extract_stream_id(match_obj):
-  """Trích xuất đúng Stream ID từ JSON Giờ Vàng"""
-  raw_json = json.dumps(match_obj)
-
-  # 1. Quét nếu có sẵn URL vcdn trong JSON
-  urls = re.findall(
-      r"https?://[^\s\"']+\.vcdn\.cloud/(\d{9,10})_hd/", raw_json
-  )
-  if urls:
-    return urls[0]
-
-  ts_val = str(match_obj.get("time_start") or match_obj.get("timestamp") or "")
-
-  # 2. Ưu tiên kiểm tra trực tiếp các key (Bổ sung key 'id' chuẩn của Giờ Vàng)
-  for key in ["id", "room_id", "stream_id", "live_id", "fi", "channel_id"]:
-    val = match_obj.get(key)
-    if val is not None:
-      s_val = str(val).strip()
-      if s_val.isdigit() and len(s_val) in [9, 10] and s_val != ts_val:
-        return s_val
-
-  # 3. Quét mảng servers / links
-  servers = (
-      match_obj.get("servers")
-      or match_obj.get("links")
-      or match_obj.get("play_urls")
-      or []
-  )
-  if isinstance(servers, list):
-    for srv in servers:
-      if isinstance(srv, dict):
-        for k in ["id", "room_id", "stream_id", "fi"]:
-          v = srv.get(k)
-          if v is not None:
-            s_v = str(v).strip()
-            if s_v.isdigit() and len(s_v) in [9, 10] and s_v != ts_val:
-              return s_v
-      elif isinstance(srv, str):
-        m = re.findall(r"(\d{9,10})", srv)
-        for found_id in m:
-          if found_id != ts_val:
-            return found_id
-
-  return None
-
-
-def fetch_url(url, timeout=10):
-  sep = "&" if "?" in url else "?"
-  full_url = f"{url}{sep}t={int(time.time())}"
-  req = urllib.request.Request(full_url, headers=HEADERS)
-  try:
-    with urllib.request.urlopen(req, timeout=timeout, context=SSL_CTX) as resp:
-      if resp.status == 200:
-        text = resp.read().decode("utf-8", errors="ignore")
-        return text.replace("\\/", "/")
-  except Exception:
-    pass
-  return None
-
-
-def main():
-  now_vn = datetime.datetime.now(TZ_VN)
-  today_str = now_vn.strftime("%d-%m-%Y")
-
-  api_sources = [
-      "https://live-api.keonhacaitp.one/storage/livestream/live.json",
-      "https://api.giovang.co/storage/livestream/live.json",
-      "https://live-api.keonhacaitp.one/storage/livestream/home.json",
-      "https://live-api.keonhacaitp.one/storage/livestream/match.json",
-      f"https://live-api.keonhacaitp.one/storage/livestream/date/{today_str}.json",
-  ]
-
-  raw_matches = []
-  with ThreadPoolExecutor(max_workers=10) as executor:
-    futures = [executor.submit(fetch_url, url) for url in api_sources]
-    for future in as_completed(futures):
-      text = future.result()
-      if text:
-        try:
-          data = json.loads(text)
-          items = (
-              data.get("response")
-              or data.get("data")
-              or (data if isinstance(data, list) else [])
-          )
-          if isinstance(items, list):
-            for item in items:
-              if isinstance(item, dict):
-                raw_matches.append(item)
-        except Exception:
-          pass
-
-  playlist_entries = []
-  seen_keys = set()
-
-  for match in raw_matches:
-    stream_id = extract_stream_id(match)
-
-    teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
-    home_obj = (
-        teams.get("home") or match.get("home") or match.get("home_team") or {}
-    )
-    away_obj = (
-        teams.get("away") or match.get("away") or match.get("away_team") or {}
-    )
-
-    home_name = (
-        home_obj.get("name") if isinstance(home_obj, dict) else str(home_obj)
-    ) or match.get("home_name", "")
-    away_name = (
-        away_obj.get("name") if isinstance(away_obj, dict) else str(away_obj)
-    ) or match.get("away_name", "")
-
-    if (
-        home_name
-        and away_name
-        and str(home_name).lower() != "none"
-        and str(away_name).lower() != "none"
-    ):
-      match_name = f"{home_name.strip()} vs {away_name.strip()}"
+    if blv_str.lower().startswith("blv-"):
+        name = blv_str[4:]
+    elif blv_str.lower().startswith("blv "):
+        name = blv_str[4:]
     else:
-      match_name = str(
-          match.get("title") or match.get("name") or "Trận đấu"
-      ).strip()
+        name = blv_str
 
-    unique_key = f"{match_name}_{match.get('time_start', '')}"
-    if unique_key in seen_keys:
-      continue
-    seen_keys.add(unique_key)
+    return f"({name})"
 
-    logo = (
-        (home_obj.get("logo") if isinstance(home_obj, dict) else "")
-        or match.get("home_logo")
-        or match.get("logo")
-        or "https://giovang.co/favicon.ico"
-    )
 
-    ts = (
-        match.get("time_start")
-        or match.get("timestamp")
-        or match.get("match_time")
-    )
-    time_str = ""
-    dt = None
+def fetch_and_generate():
+    timestamp = int(time.time())
+    api_url = f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
 
-    if ts:
-      try:
-        ts_int = int(ts)
-        if ts_int > 1e11:
-          ts_int //= 1000
-        dt = datetime.datetime.fromtimestamp(ts_int, tz=TZ_VN)
-        time_str = dt.strftime("%H:%M %d/%m")
-      except Exception:
-        pass
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://giovang.rent/",
+    }
 
-    if not time_str:
-      time_str = now_vn.strftime("%H:%M %d/%m")
+    try:
+        res = requests.get(api_url, headers=headers, timeout=15)
+        res.raise_for_status()
+        data = res.json()
+    except Exception as e:
+        print(f"Lỗi khi lấy dữ liệu API: {e}")
+        return
 
-    # Kiểm tra trạng thái LIVE
-    is_live = False
-    if dt is None or dt <= now_vn + datetime.timedelta(minutes=30):
-      is_live = True
+    matches = data.get("response", [])
+    m3u_lines = ["#EXTM3U\n"]
 
-    blv_raw = match.get("blv") or match.get("commentator") or ""
-    blv_str = clean_blv_name(blv_raw)
+    for match in matches:
+        # Check trạng thái live
+        is_live = (
+            match.get("is_live") is True
+            or match.get("status_code") == "LIVE"
+            or match.get("status") == "Đang diễn ra"
+        )
+        live_dot = "🟢 " if is_live else ""
 
-    sport_type = (
-        match.get("type")
-        or match.get("sport_type")
-        or match.get("category")
-        or ""
-    )
-    league_obj = match.get("league") or match.get("tournament") or {}
-    league_title = (
-        league_obj.get("title") or league_obj.get("name") or ""
-        if isinstance(league_obj, dict)
-        else str(league_title) if "league_title" in locals() else ""
-    )
-    emoji = get_sport_emoji(str(sport_type), str(league_title), match_name)
+        # Thời gian & Ngày
+        time_str = match.get("time", "")[:5]  # HH:MM
+        day_month = match.get("day_month", "")
 
-    # Gán URL stream
-    if is_live and stream_id:
-      status_icon = "🟢 "
-      stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{stream_id}_hd/{stream_id}_hd@720p.m3u8"
-    else:
-      status_icon = ""
-      stream_url = "https://freem3u.xyz/static/no-signal/low.m3u8"
+        # Icon thể thao
+        sport_type = match.get("type", "football")
+        sport_icon = SPORT_ICONS.get(str(sport_type).lower(), "⚽")
 
-    title = f"{status_icon}{time_str} {emoji} {match_name}{blv_str} [hls]"
+        # Đội bóng
+        teams = match.get("teams", {})
+        home_name = teams.get("home", {}).get("name", "").strip()
+        away_name = teams.get("away", {}).get("name", "").strip()
 
-    playlist_entries.append({
-        "title": title,
-        "logo": logo,
-        "url": stream_url,
-    })
+        # Logo đội bóng (ưu tiên logo đội nhà, fallback sang logo giải đấu)
+        logo = (
+            teams.get("home", {}).get("logo")
+            or match.get("league", {}).get("icon")
+            or ""
+        )
 
-  m3u_lines = ["#EXTM3U\n"]
-  for entry in playlist_entries:
-    m3u_lines.append(
-        f'#EXTINF:-1 tvg-logo="{entry["logo"]}" group-title="Giờ Vàng TV" ,'
-        f" {entry['title']}"
-    )
-    m3u_lines.append(entry["url"])
-    m3u_lines.append("")
+        # Tên BLV
+        blv_name = clean_blv_name(match.get("blv", []))
+        blv_part = f" {blv_name}" if blv_name else ""
 
-  with open("playlist.m3u", "w", encoding="utf-8") as f:
-    f.write("\n".join(m3u_lines))
+        # Xử lý Luồng phát HLS (.m3u8)
+        stream_url = match.get("stream_url") or match.get("hls") or match.get("link")
 
-  print(f"Đã xuất thành công {len(playlist_entries)} trận vào playlist.m3u!")
+        if not stream_url:
+            time_start = match.get("time_start")
+            # Tự động dựng luồng vcdn nếu trận đang diễn ra
+            if is_live and time_start:
+                stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{time_start}_hd/{time_start}_hd@720p.m3u8"
+            else:
+                stream_url = "https://freem3u.xyz/static/no-signal/low.m3u8"
+
+        # Đóng gói tiêu đề kênh chuẩn TiviMate
+        title = f"{live_dot}{time_str} {day_month} {sport_icon} {home_name} vs {away_name}{blv_part} [hls]"
+
+        extinf = (
+            f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}'
+        )
+        m3u_lines.append(extinf)
+        m3u_lines.append(f"{stream_url}\n")
+
+    # Ghi file giovang.m3u
+    with open("giovang.m3u", "w", encoding="utf-8") as f:
+        f.write("\n".join(m3u_lines))
+
+    print(f"Đã cập nhật danh sách {len(matches)} trận đấu vào giovang.m3u")
 
 
 if __name__ == "__main__":
-  main()
+    fetch_and_generate()
     
