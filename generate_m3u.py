@@ -23,18 +23,6 @@ SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode = ssl.CERT_NONE
 
-# BẬT DANH SÁCH ĐEN CÁC TỪ KHÓA CHỨA THỜI GIAN (Tránh bẫy Timestamp 179xxxxxxx)
-TIME_KEYS = {
-    "time_start",
-    "time_end",
-    "timestamp",
-    "match_time",
-    "created_at",
-    "updated_at",
-    "date",
-    "time",
-}
-
 
 def get_sport_emoji(sport_type="", league="", match_name=""):
   s = f"{sport_type} {league} {match_name}".lower()
@@ -89,43 +77,47 @@ def clean_blv_name(blv_raw):
 
 
 def extract_stream_id(match_obj):
-  """Bóc tách chính xác Stream ID, bỏ qua tất cả các trường Timestamp thời gian"""
-
-  # 1. Nếu có link trực tiếp m3u8 trong JSON
+  """Trích xuất đúng Stream ID từ JSON Giờ Vàng"""
   raw_json = json.dumps(match_obj)
+
+  # 1. Quét nếu có sẵn URL vcdn trong JSON
   urls = re.findall(
       r"https?://[^\s\"']+\.vcdn\.cloud/(\d{9,10})_hd/", raw_json
   )
   if urls:
     return urls[0]
 
-  # 2. Tìm trong danh sách máy chủ/link phát
-  servers = match_obj.get("servers") or match_obj.get("links") or []
+  ts_val = str(match_obj.get("time_start") or match_obj.get("timestamp") or "")
+
+  # 2. Ưu tiên kiểm tra trực tiếp các key (Bổ sung key 'id' chuẩn của Giờ Vàng)
+  for key in ["id", "room_id", "stream_id", "live_id", "fi", "channel_id"]:
+    val = match_obj.get(key)
+    if val is not None:
+      s_val = str(val).strip()
+      if s_val.isdigit() and len(s_val) in [9, 10] and s_val != ts_val:
+        return s_val
+
+  # 3. Quét mảng servers / links
+  servers = (
+      match_obj.get("servers")
+      or match_obj.get("links")
+      or match_obj.get("play_urls")
+      or []
+  )
   if isinstance(servers, list):
     for srv in servers:
       if isinstance(srv, dict):
-        for k, v in srv.items():
-          if k not in TIME_KEYS and v and str(v).isdigit():
-            val_str = str(v)
-            # Kiểm tra ID phòng thực sự khác với timestamp trận đấu
-            if len(val_str) in [9, 10]:
-              return val_str
-
-  # 3. Lấy trực tiếp trường room_id / live_id (NẾU KHÔNG NẰM TRONG TIME_KEYS)
-  for k in [
-      "room_id",
-      "stream_id",
-      "live_id",
-      "fi",
-      "channel_id",
-      "embed_id",
-  ]:
-    val = match_obj.get(k)
-    if val and str(val).isdigit() and len(str(val)) in [9, 10]:
-      # Kiểm tra không trùng với time_start
-      ts = str(match_obj.get("time_start", ""))
-      if str(val) != ts:
-        return str(val)
+        for k in ["id", "room_id", "stream_id", "fi"]:
+          v = srv.get(k)
+          if v is not None:
+            s_v = str(v).strip()
+            if s_v.isdigit() and len(s_v) in [9, 10] and s_v != ts_val:
+              return s_v
+      elif isinstance(srv, str):
+        m = re.findall(r"(\d{9,10})", srv)
+        for found_id in m:
+          if found_id != ts_val:
+            return found_id
 
   return None
 
@@ -146,18 +138,15 @@ def fetch_url(url, timeout=10):
 
 def main():
   now_vn = datetime.datetime.now(TZ_VN)
+  today_str = now_vn.strftime("%d-%m-%Y")
 
   api_sources = [
       "https://live-api.keonhacaitp.one/storage/livestream/live.json",
       "https://api.giovang.co/storage/livestream/live.json",
       "https://live-api.keonhacaitp.one/storage/livestream/home.json",
       "https://live-api.keonhacaitp.one/storage/livestream/match.json",
+      f"https://live-api.keonhacaitp.one/storage/livestream/date/{today_str}.json",
   ]
-
-  today_str = now_vn.strftime("%d-%m-%Y")
-  api_sources.append(
-      f"https://live-api.keonhacaitp.one/storage/livestream/date/{today_str}.json"
-  )
 
   raw_matches = []
   with ThreadPoolExecutor(max_workers=10) as executor:
@@ -245,10 +234,10 @@ def main():
     if not time_str:
       time_str = now_vn.strftime("%H:%M %d/%m")
 
+    # Kiểm tra trạng thái LIVE
     is_live = False
-    if stream_id:
-      if dt is None or dt <= now_vn + datetime.timedelta(minutes=30):
-        is_live = True
+    if dt is None or dt <= now_vn + datetime.timedelta(minutes=30):
+      is_live = True
 
     blv_raw = match.get("blv") or match.get("commentator") or ""
     blv_str = clean_blv_name(blv_raw)
@@ -267,7 +256,7 @@ def main():
     )
     emoji = get_sport_emoji(str(sport_type), str(league_title), match_name)
 
-    # GÁN LINK STREAM CHUẨN
+    # Gán URL stream
     if is_live and stream_id:
       status_icon = "🟢 "
       stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{stream_id}_hd/{stream_id}_hd@720p.m3u8"
@@ -295,7 +284,7 @@ def main():
   with open("playlist.m3u", "w", encoding="utf-8") as f:
     f.write("\n".join(m3u_lines))
 
-  print("Đã lọc sạch timestamp và xuất file playlist.m3u thành công!")
+  print(f"Đã xuất thành công {len(playlist_entries)} trận vào playlist.m3u!")
 
 
 if __name__ == "__main__":
