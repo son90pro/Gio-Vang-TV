@@ -1,8 +1,7 @@
-import re
 import time
 import requests
 
-# Bảng ánh xạ icon môn thể thao
+# Bảng ánh xạ icon môn thể thao chuẩn
 SPORT_ICONS = {
     "football": "⚽",
     "bongda": "⚽",
@@ -22,64 +21,70 @@ SPORT_ICONS = {
     "one": "🥊🥋",
 }
 
-# Link tín hiệu chờ chuẩn giúp TiviMate không báo lỗi
+# Map tên BLV gọn đẹp theo đúng mẫu của anh Sơn
+BLV_NAME_MAP = {
+    "blv-vit": "Vịt",
+    "blv vit": "Vịt",
+    "blv-sun": "Sún",
+    "blv sun": "Sún",
+    "blv-diec": "Điếc",
+    "blv diec": "Điếc",
+    "blv-beo": "Bee",
+    "blv beo": "Bee",
+    "blv mù": "Mù",
+    "blv-mu": "Mù",
+    "blv mu": "Mù",
+}
+
 NO_SIGNAL_URL = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 
-def clean_blv_name(blv_data):
-    """Xử lý định dạng tên BLV theo chuẩn mẫu"""
+def clean_blv(blv_data):
+    """Rút gọn tên BLV đúng chuẩn mẫu"""
     if not blv_data:
         return ""
-    name = blv_data[0] if isinstance(blv_data, list) else str(blv_data)
-    name = name.strip()
-    if not name:
+    raw = blv_data[0] if isinstance(blv_data, list) else str(blv_data)
+    raw = raw.strip()
+    if not raw:
         return ""
-    return f"({name})"
+
+    low_raw = raw.lower()
+    if low_raw in BLV_NAME_MAP:
+        return f"({BLV_NAME_MAP[low_raw]})"
+
+    return f"({raw})"
 
 
-def fetch_live_m3u8(match_id, headers):
-    """Lấy link .m3u8 thực tế khi trận đấu đang phát LIVE"""
-    if not match_id:
-        return None
+def get_match_stream_url(match, headers):
+    """Lấy link .m3u8 trực tiếp từ match object hoặc gọi API detail"""
+    # 1. Kiểm tra các field link có sẵn trong live.json
+    for key in ["hls", "stream_url", "play_url", "link"]:
+        val = match.get(key)
+        if (
+            val
+            and isinstance(val, str)
+            and val.startswith("http")
+            and ".m3u8" in val
+        ):
+            return val
 
-    # 1. Gọi API chi tiết của trận đấu
-    try:
-        detail_url = f"https://live-api.keonhacaitp.one/storage/livestream/detail/{match_id}.json"
-        r = requests.get(detail_url, headers=headers, timeout=4)
-        if r.status_code == 200:
-            d = r.json().get("response", {})
-            for key in [
-                "hls",
-                "stream_url",
-                "link",
-                "play_url",
-                "m3u8",
-                "link_embed",
-            ]:
-                val = d.get(key)
-                if (
-                    val
-                    and isinstance(val, str)
-                    and val.startswith("http")
-                    and ".m3u8" in val
-                ):
-                    return val
-    except Exception:
-        pass
-
-    # 2. Cào mã nguồn trang xem trực tiếp nếu API không trả về
-    web_urls = [
-        f"https://giovang.rent/xem-truc-tiep/{match_id}",
-        f"https://giovang.rent/live/{match_id}",
-        f"https://giovang.rent/?p={match_id}",
-    ]
-    for w_url in web_urls:
+    # 2. Nếu là trận LIVE mà chưa có link, gọi API detail để lấy luồng vcdn thực tế
+    match_id = match.get("id") or match.get("fi")
+    if match_id:
         try:
-            r = requests.get(w_url, headers=headers, timeout=4)
-            if r.status_code == 200:
-                found = re.findall(r'https?://[^\s"\'<>]+?\.m3u8', r.text)
-                if found:
-                    return found[0]
+            detail_url = f"https://live-api.keonhacaitp.one/storage/livestream/detail/{match_id}.json"
+            res = requests.get(detail_url, headers=headers, timeout=4)
+            if res.status_code == 200:
+                data = res.json().get("response", {})
+                for key in ["hls", "stream_url", "play_url", "link"]:
+                    val = data.get(key)
+                    if (
+                        val
+                        and isinstance(val, str)
+                        and val.startswith("http")
+                        and ".m3u8" in val
+                    ):
+                        return val
         except Exception:
             pass
 
@@ -109,39 +114,24 @@ def generate_m3u():
 
     matches = data.get("response", [])
     if not matches:
-        print("Không tìm thấy danh sách trận đấu.")
+        print("Không có trận đấu nào.")
         return
 
-    m3u_entries = ["#EXTM3U"]
+    m3u_blocks = ["#EXTM3U"]
 
     for match in matches:
-        match_id = match.get("id") or match.get("fi")
         is_live = (
             match.get("is_live") is True
             or match.get("status_code") == "LIVE"
             or match.get("status") == "Đang diễn ra"
         )
 
-        # Lấy luồng stream trực tiếp
         stream_url = None
         if is_live:
-            # Kiểm tra trong object match từ live.json
-            for k in ["hls", "stream_url", "link", "play_url"]:
-                val = match.get(k)
-                if (
-                    val
-                    and isinstance(val, str)
-                    and val.startswith("http")
-                    and ".m3u8" in val
-                ):
-                    stream_url = val
-                    break
+            stream_url = get_match_stream_url(match, headers)
 
-            if not stream_url:
-                stream_url = fetch_live_m3u8(match_id, headers)
-
-        # Quyết định Ký hiệu màu & URL stream
-        if is_live and stream_url and stream_url != NO_SIGNAL_URL:
+        # Xác định biểu tượng trạng thái và URL stream
+        if is_live and stream_url and "no-signal" not in stream_url:
             status_icon = "🟢 "
         elif is_live:
             status_icon = "🟡 "
@@ -150,7 +140,7 @@ def generate_m3u():
             status_icon = ""
             stream_url = NO_SIGNAL_URL
 
-        # Thời gian, môn thể thao, tên đội
+        # Thời gian, môn thể thao & tên đội
         time_str = match.get("time", "")[:5]
         day_month = match.get("day_month", "")
 
@@ -167,24 +157,22 @@ def generate_m3u():
             or ""
         )
 
-        # Tên BLV
-        blv_part = clean_blv_name(match.get("blv"))
-        if blv_part:
-            blv_part = f" {blv_part}"
+        blv_str = clean_blv(match.get("blv"))
+        blv_part = f" {blv_str}" if blv_str else ""
 
-        # Đóng gói dòng thông tin kênh
         title = f"{status_icon}{time_str} {day_month} {sport_icon} {home_name} vs {away_name}{blv_part} [hls]"
         extinf = f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}'
 
-        m3u_entries.append(f"{extinf}\n{stream_url}")
+        # Cấu trúc 2 dòng gọn gàng như mẫu
+        m3u_blocks.append(f"{extinf}\n{stream_url}")
 
-    # Tạo file .m3u đúng định dạng có dòng trống phân cách giữa các trận
-    full_m3u = "\n\n".join(m3u_entries) + "\n"
+    # Đóng gói file M3U cách nhau đúng 1 dòng trống
+    full_content = "\n\n".join(m3u_blocks) + "\n"
 
     with open("giovang.m3u", "w", encoding="utf-8") as f:
-        f.write(full_m3u)
+        f.write(full_content)
 
-    print(f"Đã xuất thành công {len(matches)} trận đấu ra file giovang.m3u")
+    print(f"Đã xuất thành công {len(matches)} trận vào file giovang.m3u")
 
 
 if __name__ == "__main__":
