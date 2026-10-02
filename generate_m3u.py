@@ -65,7 +65,13 @@ def clean_blv_name(blv_raw):
   if not name or name.lower() in ["none", "null", "undefined"]:
     return ""
 
-  cleaned = re.sub(r"^blv[-_\s]*", "", name, flags=re.IGNORECASE).strip()
+  cleaned = re.sub(
+      r"^(blv|commentator)[-_\s]*", "", name, flags=re.IGNORECASE
+  ).strip()
+  if cleaned:
+    # Giữ nguyên chữ BLV nếu có sẵn từ API mẫu của anh
+    if not name.lower().startswith("blv"):
+      cleaned = f"BLV {cleaned}"
   return f" ({cleaned})" if cleaned else ""
 
 
@@ -83,40 +89,33 @@ def fetch_url(url, timeout=10):
   return None
 
 
-def extract_all_m3u8(text):
-  """Bóc tách tất cả link m3u8 và room id trực tiếp từ JSON"""
-  if not text:
-    return []
+def extract_room_id(match_obj):
+  """Bóc tách chính xác room_id chuẩn 10 chữ số dạng 179xxxxxxx"""
+  match_str = json.dumps(match_obj)
 
-  links = []
+  # 1. Quét regex trực tiếp chuỗi room_id 10 chữ số trong toàn bộ JSON của trận
+  ids = re.findall(r"\b(179\d{7})\b", match_str)
+  if ids:
+    return ids[0]
 
-  # 1. Tìm các link .m3u8 trực tiếp
-  m3u8_found = re.findall(
-      r"https?://[^\s\"']+\.m3u8[^\s\"']*", text, re.IGNORECASE
-  )
-  for m in m3u8_found:
-    if "no-signal" not in m:
-      links.append(m)
+  # 2. Quét các dạng 10 chữ số bất kỳ bắt đầu bằng 17/18
+  ids_gen = re.findall(r"\b(1[789]\d{7,8})\b", match_str)
+  if ids_gen:
+    return ids_gen[0]
 
-  # 2. Quét Room ID dạng 10 chữ số
-  room_ids = re.findall(r'"room_id"\s*:\s*"?(\d{9,11})"?', text)
-  if not room_ids:
-    room_ids = re.findall(r"\b(1[789]\d{8,9})\b", text)
+  # 3. Quét thuộc tính room_id hoặc fi
+  for key in ["room_id", "fi", "live_id", "id"]:
+    val = match_obj.get(key)
+    if val and str(val).isdigit() and len(str(val)) in [9, 10]:
+      return str(val)
 
-  for r_id in room_ids:
-    # Tạo các định dạng CDN phổ biến của Giờ Vàng
-    links.append(
-        f"https://ftlh5sc02iliv.vcdn.cloud/{r_id}_hd/{r_id}_hd@720p.m3u8"
-    )
-    links.append(f"https://live.giovang.co/live/{r_id}/playlist.m3u8")
-
-  return list(set(links))
+  return None
 
 
 def main():
   now_vn = datetime.datetime.now(TZ_VN)
 
-  # Các endpoint chứa dữ liệu trận đấu live
+  # Các API chính chứa danh sách trận đấu
   api_sources = [
       "https://live-api.keonhacaitp.one/storage/livestream/live.json",
       "https://api.giovang.co/storage/livestream/live.json",
@@ -149,13 +148,19 @@ def main():
         except Exception:
           pass
 
-  channels_list = []
+  playlist_dict = {}
 
   for match in raw_matches:
-    match_str = json.dumps(match)
-    stream_links = extract_all_m3u8(match_str)
+    room_id = extract_room_id(match)
 
-    # Lấy thông tin trận đấu
+    # Chỉ xử lý các trận lấy được room_id (bỏ qua hoàn toàn no-signal)
+    if not room_id:
+      continue
+
+    # Tái tạo link VCDN chuẩn xác theo file M3U mẫu
+    stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{room_id}_hd/{room_id}_hd@720p.m3u8"
+
+    # Xử lý Tên trận đấu
     teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
     home_obj = (
         teams.get("home") or match.get("home") or match.get("home_team") or {}
@@ -178,6 +183,7 @@ def main():
           match.get("title") or match.get("name") or "Trận đấu"
       ).strip()
 
+    # Xử lý Logo
     logo = (
         (home_obj.get("logo") if isinstance(home_obj, dict) else "")
         or match.get("home_logo")
@@ -185,6 +191,7 @@ def main():
         or ""
     )
 
+    # Xử lý Thời gian
     ts = (
         match.get("time_start")
         or match.get("timestamp")
@@ -200,9 +207,11 @@ def main():
         time_str = dt.strftime("%H:%M %d/%m")
       except Exception:
         pass
+
     if not time_str:
       time_str = now_vn.strftime("%H:%M %d/%m")
 
+    # BLV & Icon môn thể thao
     blv_raw = match.get("blv") or match.get("commentator") or ""
     blv_str = clean_blv_name(blv_raw)
 
@@ -216,61 +225,31 @@ def main():
     league_title = (
         league_obj.get("title") or league_obj.get("name") or ""
         if isinstance(league_obj, dict)
-        else str(league_title)
-        if "league_title" in locals()
-        else ""
+        else str(league_obj)
     )
     emoji = get_sport_emoji(str(sport_type), str(league_title), match_name)
 
-    # Nếu có link phát trực tiếp
-    if stream_links:
-      for idx, link in enumerate(stream_links):
-        server_tag = f" [SV{idx+1}]" if len(stream_links) > 1 else ""
-        channels_list.append({
-            "title": (
-                f"🟢 {time_str} {emoji} {match_name}{blv_str}{server_tag} [hls]"
-            ),
-            "logo": logo,
-            "url": link,
-            "is_live": True,
-            "key": f"{match_name}_{time_str}_{blv_str}_{idx}",
-        })
-    else:
-      # Link dự phòng nếu chưa lên sóng
-      channels_list.append({
-          "title": f"🟡 {time_str} {emoji} {match_name}{blv_str} [hls]",
-          "logo": logo,
-          "url": "https://freem3u.xyz/static/no-signal/low.m3u8",
-          "is_live": False,
-          "key": f"{match_name}_{time_str}_{blv_str}_nosig",
-      })
+    key = f"{room_id}"
+    playlist_dict[key] = {
+        "title": f"🟢 {time_str} {emoji} {match_name}{blv_str} [hls]",
+        "logo": logo,
+        "url": stream_url,
+    }
 
-  # Lọc trùng lặp
-  seen_keys = set()
-  final_channels = []
-  for ch in channels_list:
-    if ch["key"] not in seen_keys:
-      seen_keys.add(ch["key"])
-      final_channels.append(ch)
-
-  # Tạo nội dung playlist.m3u
+  # Xuất file M3U
   m3u_lines = ["#EXTM3U\n"]
-  m3u_lines.append(
-      f"# Updated at {datetime.datetime.now(TZ_VN).strftime('%Y-%m-%d %H:%M:%S')}"
-  )
-
-  for ch in final_channels:
+  for item in playlist_dict.values():
     m3u_lines.append(
-        f'#EXTINF:-1 tvg-logo="{ch["logo"]}" group-title="Giờ Vàng TV" ,'
-        f" {ch['title']}"
+        f'#EXTINF:-1 tvg-logo="{item["logo"]}" group-title="Giờ Vàng TV" ,'
+        f" {item['title']}"
     )
-    m3u_lines.append(ch["url"])
+    m3u_lines.append(item["url"])
     m3u_lines.append("")
 
   with open("playlist.m3u", "w", encoding="utf-8") as f:
     f.write("\n".join(m3u_lines))
 
-  print("Cập nhật playlist.m3u thành công!")
+  print("Đã tạo file playlist.m3u chuẩn vcdn.cloud!")
 
 
 if __name__ == "__main__":
