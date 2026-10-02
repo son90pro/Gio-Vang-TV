@@ -10,13 +10,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Múi giờ Việt Nam (GMT+7)
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-REF = "https://giovang.rent/"
-
 HEADERS = {
-    "User-Agent": UA,
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Referer": REF,
+    "Referer": "https://giovang.rent/",
 }
 
 SSL_CTX = ssl.create_default_context()
@@ -25,7 +22,7 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 def get_sport_emoji(sport_type="", league="", team=""):
-    """Phân loại biểu tượng môn thể thao chuẩn mẫu M3U"""
+    """Phân loại biểu tượng môn thể thao"""
     s = f"{sport_type} {league} {team}".lower()
     if any(k in s for k in ["basketball", "bóng rổ", "nba", "aces", "fever"]):
         return "🏀"
@@ -47,7 +44,7 @@ def get_sport_emoji(sport_type="", league="", team=""):
 
 
 def clean_blv_name(blv_raw):
-    """Làm sạch tên Bình luận viên (VD: blv-sup -> Súp)"""
+    """Format tên Bình luận viên chuẩn (Súp), (Cận), (Riko)"""
     if not blv_raw:
         return ""
     if isinstance(blv_raw, list):
@@ -77,21 +74,42 @@ def fetch_url(url, timeout=12):
 
 
 def extract_stream_url(match):
-    """Trích xuất link VCDN 10 chữ số chuẩn"""
-    for key in ["room_id", "stream_id", "live_id", "fi", "id"]:
-        val = match.get(key)
-        if val and str(val).isdigit() and len(str(val)) in [9, 10, 11]:
-            return f"https://ftlh5sc02iliv.vcdn.cloud/{val}_hd/{val}_hd@720p.m3u8"
+    """Trích xuất mã Stream ID chính xác (Loại bỏ Timestamp)"""
+    time_ts = str(match.get("time_start", ""))
+    time_end_ts = str(match.get("time_end", ""))
 
-    match_str = json.dumps(match)
-    m = re.search(r"https?://ftlh5sc02iliv\.vcdn\.cloud/\d+_hd/\d+_hd@720p\.m3u8", match_str)
-    if m:
-        return m.group(0)
+    # 1. Tìm trong các trường ưu tiên chứa Stream ID thực sự
+    for key in ["room_id", "stream_id", "live_id", "fi"]:
+        val = str(match.get(key, "")).strip()
+        if val and val.isdigit() and len(val) in [9, 10, 11]:
+            if val != time_ts and val != time_end_ts:
+                return f"https://ftlh5sc02iliv.vcdn.cloud/{val}_hd/{val}_hd@720p.m3u8"
 
-    ids = re.findall(r"\b(179\d{7}|178\d{7}|\d{10})\b", match_str)
-    if ids:
-        s_id = ids[0]
-        return f"https://ftlh5sc02iliv.vcdn.cloud/{s_id}_hd/{s_id}_hd@720p.m3u8"
+    # 2. Quét đệ quy trong Object JSON nhưng bỏ qua toàn bộ key thời gian
+    def search_stream_id(obj, key_name=""):
+        if any(t in key_name.lower() for t in ["time", "date", "created", "updated"]):
+            return None
+
+        if isinstance(obj, (int, str)):
+            s_val = str(obj).strip()
+            if s_val.isdigit() and len(s_val) in [9, 10, 11]:
+                if s_val != time_ts and s_val != time_end_ts and not s_val.endswith("0000"):
+                    return s_val
+        elif isinstance(obj, dict):
+            for k, v in obj.items():
+                res = search_stream_id(v, k)
+                if res:
+                    return res
+        elif isinstance(obj, list):
+            for item in obj:
+                res = search_stream_id(item, key_name)
+                if res:
+                    return res
+        return None
+
+    found_id = search_stream_id(match)
+    if found_id:
+        return f"https://ftlh5sc02iliv.vcdn.cloud/{found_id}_hd/{found_id}_hd@720p.m3u8"
 
     return "https://freem3u.xyz/static/no-signal/low.m3u8"
 
@@ -148,7 +166,7 @@ def main():
 
     all_matches_dict = {}
 
-    # 1. Cào API
+    # 1. Cào nguồn API
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_url = {executor.submit(fetch_url, url): url for url in api_sources}
         for future in as_completed(future_to_url):
@@ -166,7 +184,7 @@ def main():
                 except Exception:
                     pass
 
-    # 2. Cào Web HTML
+    # 2. Cào trang HTML
     with ThreadPoolExecutor(max_workers=5) as executor:
         future_to_url = {executor.submit(fetch_url, url): url for url in web_sources}
         for future in as_completed(future_to_url):
@@ -177,7 +195,7 @@ def main():
                     if m_id and str(m_id) not in all_matches_dict:
                         all_matches_dict[str(m_id)] = item
 
-    # 3. Xuất M3U tích hợp Header Bypass cho TiviMate
+    # 3. Xuất file M3U nguyên bản sạch 100% như mẫu tttt.m3u
     m3u_lines = ["#EXTM3U\n"]
 
     for match in all_matches_dict.values():
@@ -217,21 +235,13 @@ def main():
         title = f"{status_icon}{time_str} {emoji} {match_name}{blv_str} [hls]"
 
         m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}')
-        
-        # Bổ sung 2 lớp Header Bypass (Cả EXTVLCOPT lẫn Pipe Syntax)
-        if is_live:
-            m3u_lines.append(f"#EXTVLCOPT:http-user-agent={UA}")
-            m3u_lines.append(f"#EXTVLCOPT:http-referrer={REF}")
-            m3u_lines.append(f"{stream_url}|User-Agent={UA}&Referer={REF}")
-        else:
-            m3u_lines.append(stream_url)
-
+        m3u_lines.append(stream_url)
         m3u_lines.append("")
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print("Cập nhật thành công playlist.m3u kèm Header bypass!")
+    print("Cập nhật thành công playlist.m3u chuẩn 100%!")
 
 
 if __name__ == "__main__":
