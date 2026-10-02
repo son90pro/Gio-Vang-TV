@@ -11,16 +11,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Múi giờ Việt Nam (GMT+7)
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
-# Header chuẩn giả lập trình duyệt để bypass CDN
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-REFERER = "https://giovang.rent/"
-
 HEADERS = {
-    "User-Agent": USER_AGENT,
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Origin": "https://giovang.rent",
-    "Referer": REFERER,
+    "Referer": "https://giovang.rent/",
 }
 
 SSL_CTX = ssl.create_default_context()
@@ -50,7 +44,7 @@ def get_sport_emoji(sport_type="", league="", team=""):
     return "⚽"
 
 
-def fetch_url(url, timeout=12):
+def fetch_url(url, timeout=10):
     """Tải dữ liệu URL kèm bypass SSL"""
     sep = "&" if "?" in url else "?"
     full_url = f"{url}{sep}t={int(time.time())}"
@@ -66,25 +60,22 @@ def fetch_url(url, timeout=12):
 
 
 def build_vcdn_url(stream_id):
-    """Tạo đường dẫn VCDN chuẩn từ mã fi / stream_id"""
+    """Tạo đường dẫn VCDN chuẩn nguyên bản"""
     if not stream_id:
         return None
     s_id = str(stream_id).strip()
-    # Nếu là ID dạng số timestamp (ví dụ 1790897629)
     if len(s_id) in [9, 10, 11] and s_id.isdigit():
         return f"https://ftlh5sc02iliv.vcdn.cloud/{s_id}_hd/{s_id}_hd@720p.m3u8"
     return None
 
 
 def extract_stream_from_match(match):
-    """Lấy link stream trực tiếp từ match dictionary"""
-    # 1. Tìm trực tiếp từ trường fi / room_id / stream_id
+    """Lấy link stream trực tiếp từ match object"""
     stream_id = match.get("fi") or match.get("room_id") or match.get("stream_id")
     vcdn_link = build_vcdn_url(stream_id)
     if vcdn_link:
         return vcdn_link
 
-    # 2. Tìm đệ quy trong object nếu có link m3u8 sẵn
     def search_m3u8(obj):
         if isinstance(obj, str):
             if "vcdn.cloud" in obj or (".m3u8" in obj and "no-signal" not in obj):
@@ -114,7 +105,7 @@ def extract_stream_from_match(match):
 
 
 def extract_matches_from_html(html_content):
-    """Rút trích dữ liệu từ thẻ __NEXT_DATA__ trong trang HTML"""
+    """Rút trích dữ liệu từ thẻ __NEXT_DATA__ trong HTML"""
     matches = []
     if not html_content:
         return matches
@@ -238,7 +229,7 @@ def main():
 
     valid_matches.sort(key=sort_key)
 
-    # 5. Xuất Playlist M3U chuẩn TiviMate
+    # 5. Xuất Playlist M3U tối giản chuẩn mẫu
     m3u_lines = ["#EXTM3U\n"]
 
     for match in valid_matches:
@@ -283,8 +274,8 @@ def main():
         blv_list = match.get("blv", [])
         if isinstance(blv_list, list) and blv_list:
             blv_str = f" ({', '.join([str(b) for b in blv_list])})"
-        elif isinstance(blv_list, str) and blv_list:
-            blv_str = f" ({blv_list})"
+        elif isinstance(blv_list, str) and blv_str := str(blv_list):
+            blv_str = f" ({blv_str})"
         else:
             blv_str = ""
 
@@ -300,27 +291,18 @@ def main():
         status_icon = "🟢 " if not is_no_signal else "🟡 "
         title = f"{status_icon}{time_str} {emoji} {match_name}{blv_str} [hls]"
 
-        # Thẻ thông tin M3U
+        # Ghi 2 dòng chuẩn mẫu
         m3u_lines.append(
-            f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV", {title}'
+            f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}'
         )
-        m3u_lines.append(f"#EXTVLCOPT:http-user-agent={USER_AGENT}")
-        m3u_lines.append(f"#EXTVLCOPT:http-referrer={REFERER}")
-
-        # Pipe syntax truyền trực tiếp Header vào URL cho TiviMate / VLC
-        if not is_no_signal:
-            final_url = f"{stream_url}|User-Agent={USER_AGENT}&Referer={REFERER}"
-        else:
-            final_url = stream_url
-
-        m3u_lines.append(final_url)
+        m3u_lines.append(stream_url)
         m3u_lines.append("")
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
     print(
-        f"Hoàn tất! Đã cập nhật playlist.m3u chuẩn cho {len(valid_matches)} trận đấu.",
+        f"Hoàn tất! Đã tạo file playlist.m3u chuẩn mẫu cho {len(valid_matches)} trận đấu.",
         flush=True,
     )
 
