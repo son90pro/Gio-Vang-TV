@@ -72,31 +72,6 @@ def clean_blv_name(blv_raw):
   return f" ({name})" if name else ""
 
 
-def is_valid_room_id(val, match_time_start=None):
-  if not val:
-    return False
-  s = str(val).strip()
-  if not (s.isdigit() and len(s) in [9, 10, 11]):
-    return False
-
-  v = int(s)
-  if match_time_start and v == int(match_time_start):
-    return False
-
-  if (
-      v % 300 == 0
-      and match_time_start
-      and abs(v - int(match_time_start)) < 7200
-  ):
-    return False
-
-  return True
-
-
-def get_vcdn_url(room_id):
-  return f"https://ftlh5sc02iliv.vcdn.cloud/{room_id}_hd/{room_id}_hd@720p.m3u8"
-
-
 def fetch_url(url, timeout=12):
   sep = "&" if "?" in url else "?"
   full_url = f"{url}{sep}t={int(time.time())}"
@@ -111,19 +86,33 @@ def fetch_url(url, timeout=12):
   return None
 
 
-def extract_rooms_from_match(match):
-  time_start = (
-      match.get("time_start")
-      or match.get("timestamp")
-      or match.get("match_time")
+def find_stream_url(obj):
+  """Tìm link .m3u8 hoặc room_id từ dict/object bất kỳ"""
+  if not obj:
+    return None
+
+  obj_str = json.dumps(obj)
+
+  # 1. Quét trực tiếp link .m3u8 trong JSON
+  m3u8_matches = re.findall(
+      r"https?://[^\s\"']+\.m3u8[^\s\"']*", obj_str, re.IGNORECASE
   )
-  match_str = json.dumps(match)
+  for link in m3u8_matches:
+    if "no-signal" not in link:
+      return link
 
-  m3u8_links = re.findall(r"https?://[^\s\"']+\.m3u8", match_str)
-  vcdn_ids = re.findall(r"\b(17[89]\d{7}|180\d{7})\b", match_str)
-  valid_vcdn_ids = [s for s in vcdn_ids if is_valid_room_id(s, time_start)]
+  # 2. Tìm ID phòng live (dạng 9-11 chữ số)
+  room_ids = re.findall(r"\b(1[789]\d{7,9})\b", obj_str)
+  if room_ids:
+    return f"https://ftlh5sc02iliv.vcdn.cloud/{room_ids[0]}_hd/{room_ids[0]}_hd@720p.m3u8"
 
+  return None
+
+
+def extract_rooms_from_match(match):
   rooms_data = []
+
+  # Lấy danh sách BLV/Phòng live nếu có
   candidates = []
   for k in [
       "relate_rooms",
@@ -138,91 +127,51 @@ def extract_rooms_from_match(match):
       candidates = val
       break
 
-  if not candidates:
-    blv_val = match.get("blv") or match.get("commentator")
-    if (
-        isinstance(blv_val, list)
-        and len(blv_val) > 0
-        and isinstance(blv_val[0], dict)
-    ):
-      candidates = blv_val
-
   if candidates:
     for r in candidates:
       if isinstance(r, dict):
-        r_id = None
-        for key in [
-            "room_id",
-            "id",
-            "live_id",
-            "stream_id",
-            "channel_id",
-            "fi",
-            "room",
-        ]:
-          val = r.get(key)
-          if val and is_valid_room_id(val, time_start):
-            r_id = str(val).strip()
-            break
-
-        if not r_id and valid_vcdn_ids:
-          r_id = valid_vcdn_ids[0]
-
         blv_name = (
             r.get("name")
             or r.get("blv_name")
             or r.get("nickname")
             or r.get("commentator")
             or r.get("title")
-            or match.get("blv")
             or ""
         )
-
-        url = get_vcdn_url(r_id) if r_id else None
-        if not url and m3u8_links:
-          url = m3u8_links[0]
-        if not url:
-          url = "https://freem3u.xyz/static/no-signal/low.m3u8"
-
-        rooms_data.append(
-            {"room_id": r_id, "blv": blv_name, "stream_url": url}
-        )
+        url = find_stream_url(r) or find_stream_url(match)
+        if url:
+          rooms_data.append(
+              {"blv": blv_name, "stream_url": url, "is_valid": True}
+          )
       elif isinstance(r, str):
-        r_id = valid_vcdn_ids[0] if valid_vcdn_ids else None
-        url = (
-            get_vcdn_url(r_id)
-            if r_id
-            else "https://freem3u.xyz/static/no-signal/low.m3u8"
-        )
-        rooms_data.append({"room_id": r_id, "blv": r, "stream_url": url})
+        url = find_stream_url(match)
+        if url:
+          rooms_data.append({"blv": r, "stream_url": url, "is_valid": True})
 
   if not rooms_data:
-    r_id = None
-    for key in ["room_id", "live_id", "stream_id", "channel_id", "fi", "room"]:
-      val = match.get(key)
-      if val and is_valid_room_id(val, time_start):
-        r_id = str(val).strip()
-        break
-
-    if not r_id and valid_vcdn_ids:
-      r_id = valid_vcdn_ids[0]
-
     blv_name = match.get("blv") or match.get("commentator") or ""
-    url = get_vcdn_url(r_id) if r_id else None
-    if not url and m3u8_links:
-      url = m3u8_links[0]
-    if not url:
-      url = "https://freem3u.xyz/static/no-signal/low.m3u8"
-
-    rooms_data.append({"room_id": r_id, "blv": blv_name, "stream_url": url})
+    url = find_stream_url(match)
+    if url:
+      rooms_data.append({"blv": blv_name, "stream_url": url, "is_valid": True})
+    else:
+      # Nếu trận chưa/không có link live thì mới dùng link fallback
+      rooms_data.append({
+          "blv": blv_name,
+          "stream_url": "https://freem3u.xyz/static/no-signal/low.m3u8",
+          "is_valid": False,
+      })
 
   return rooms_data
 
 
 def extract_match_info(match):
   teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
-  home_obj = teams.get("home") or match.get("home") or match.get("home_team") or {}
-  away_obj = teams.get("away") or match.get("away") or match.get("away_team") or {}
+  home_obj = (
+      teams.get("home") or match.get("home") or match.get("home_team") or {}
+  )
+  away_obj = (
+      teams.get("away") or match.get("away") or match.get("away_team") or {}
+  )
 
   home_name = (
       home_obj.get("name") if isinstance(home_obj, dict) else str(home_obj)
@@ -273,7 +222,10 @@ def extract_match_info(match):
     time_str = datetime.datetime.now(TZ_VN).strftime("%H:%M %d/%m")
 
   sport_type = (
-      match.get("type") or match.get("sport_type") or match.get("category") or ""
+      match.get("type")
+      or match.get("sport_type")
+      or match.get("category")
+      or ""
   )
   league_obj = match.get("league") or match.get("tournament") or {}
   league_title = (
@@ -304,7 +256,7 @@ def main():
       "https://live-api.keonhacaitp.one/storage/livestream/schedule.json",
   ]
 
-  for i in range(-1, 3):
+  for i in range(-1, 2):
     day = now_vn + datetime.timedelta(days=i)
     d1 = day.strftime("%d-%m-%Y")
     d2 = day.strftime("%Y-%m-%d")
@@ -347,30 +299,28 @@ def main():
     for room in rooms:
       stream_url = room["stream_url"]
       blv_str = clean_blv_name(room["blv"])
+      is_valid = room["is_valid"]
 
       match_key = f"{info['match_name'].lower().strip()}_{info['time_str']}_{blv_str.lower().strip()}"
-      is_live = "vcdn.cloud" in stream_url
 
+      # Nếu đã có trong danh sách nhưng chưa có link thật mà lượt này tìm thấy link thật -> Ghi đè
       if match_key in playlist_dict:
-        existing = playlist_dict[match_key]
-        if not existing["is_live"] and is_live:
+        if not playlist_dict[match_key]["is_valid"] and is_valid:
           playlist_dict[match_key] = {
               "info": info,
               "stream_url": stream_url,
               "blv_str": blv_str,
-              "is_live": is_live,
+              "is_valid": is_valid,
           }
       else:
         playlist_dict[match_key] = {
             "info": info,
             "stream_url": stream_url,
             "blv_str": blv_str,
-            "is_live": is_live,
+            "is_valid": is_valid,
         }
 
   m3u_lines = ["#EXTM3U\n"]
-
-  # Thêm comment chứa thời gian cập nhật để Git luôn nhận diện file có thay đổi
   m3u_lines.append(
       f"# Updated at {datetime.datetime.now(TZ_VN).strftime('%Y-%m-%d %H:%M:%S')}"
   )
@@ -379,9 +329,9 @@ def main():
     info = item["info"]
     stream_url = item["stream_url"]
     blv_str = item["blv_str"]
-    is_live = item["is_live"]
+    is_valid = item["is_valid"]
 
-    status_icon = "🟢 " if is_live else "🟡 "
+    status_icon = "🟢 " if is_valid else "🟡 "
     title = f"{status_icon}{info['time_str']} {info['emoji']} {info['match_name']}{blv_str} [hls]"
 
     m3u_lines.append(
@@ -394,9 +344,9 @@ def main():
   with open("playlist.m3u", "w", encoding="utf-8") as f:
     f.write("\n".join(m3u_lines))
 
-  print("Đã cập nhật thành công playlist.m3u chuẩn vcdn.cloud!")
+  print("Đã cập nhật playlist.m3u!")
 
 
 if __name__ == "__main__":
   main()
-        
+      
