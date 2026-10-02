@@ -66,10 +66,7 @@ def clean_blv_name(blv_raw):
     return ""
 
   cleaned = re.sub(r"^blv[-_\s]*", "", name, flags=re.IGNORECASE).strip()
-  if cleaned:
-    name = cleaned.capitalize()
-
-  return f" ({name})" if name else ""
+  return f" ({cleaned})" if cleaned else ""
 
 
 def fetch_url(url, timeout=10):
@@ -86,146 +83,53 @@ def fetch_url(url, timeout=10):
   return None
 
 
-def extract_stream_from_text(text):
+def extract_all_m3u8(text):
+  """Bóc tách tất cả link m3u8 và room id trực tiếp từ JSON"""
   if not text:
-    return None
+    return []
 
-  # 1. Tìm trực tiếp URL m3u8
-  m3u8s = re.findall(
+  links = []
+
+  # 1. Tìm các link .m3u8 trực tiếp
+  m3u8_found = re.findall(
       r"https?://[^\s\"']+\.m3u8[^\s\"']*", text, re.IGNORECASE
   )
-  for m in m3u8s:
+  for m in m3u8_found:
     if "no-signal" not in m:
-      return m
+      links.append(m)
 
-  # 2. Tìm Room ID dạng 178xxxxxxx, 179xxxxxxx, 180xxxxxxx...
-  ids = re.findall(r"\b(1[789]\d{7,9})\b", text)
-  if ids:
-    return f"https://ftlh5sc02iliv.vcdn.cloud/{ids[0]}_hd/{ids[0]}_hd@720p.m3u8"
+  # 2. Quét Room ID dạng 10 chữ số
+  room_ids = re.findall(r'"room_id"\s*:\s*"?(\d{9,11})"?', text)
+  if not room_ids:
+    room_ids = re.findall(r"\b(1[789]\d{8,9})\b", text)
 
-  # 3. Quét bất kỳ chuỗi số nào trong field room_id
-  room_matches = re.findall(r'"room_id"\s*:\s*"?(\d+)"?', text)
-  for r_id in room_matches:
-    if len(r_id) >= 6:
-      return f"https://ftlh5sc02iliv.vcdn.cloud/{r_id}_hd/{r_id}_hd@720p.m3u8"
+  for r_id in room_ids:
+    # Tạo các định dạng CDN phổ biến của Giờ Vàng
+    links.append(
+        f"https://ftlh5sc02iliv.vcdn.cloud/{r_id}_hd/{r_id}_hd@720p.m3u8"
+    )
+    links.append(f"https://live.giovang.co/live/{r_id}/playlist.m3u8")
 
-  return None
-
-
-def process_single_match(match):
-  m_id = match.get("id") or match.get("match_id")
-  match_str = json.dumps(match)
-
-  stream_url = extract_stream_from_text(match_str)
-
-  # Nếu không có link trong JSON tổng, gọi API chi tiết của trận đó
-  if not stream_url and m_id:
-    detail_url = f"https://live-api.keonhacaitp.one/storage/livestream/match/{m_id}.json"
-    detail_text = fetch_url(detail_url)
-    if detail_text:
-      stream_url = extract_stream_from_text(detail_text)
-
-  # Fallback cuối cùng nếu thực sự chưa phát live
-  is_live = True
-  if not stream_url:
-    stream_url = "https://freem3u.xyz/static/no-signal/low.m3u8"
-    is_live = False
-
-  # Xử lý thông tin trận đấu
-  teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
-  home_obj = (
-      teams.get("home") or match.get("home") or match.get("home_team") or {}
-  )
-  away_obj = (
-      teams.get("away") or match.get("away") or match.get("away_team") or {}
-  )
-
-  home_name = (
-      home_obj.get("name") if isinstance(home_obj, dict) else str(home_obj)
-  ) or match.get("home_name", "")
-  away_name = (
-      away_obj.get("name") if isinstance(away_obj, dict) else str(away_obj)
-  ) or match.get("away_name", "")
-
-  if home_name and away_name and home_name != "None" and away_name != "None":
-    match_name = f"{home_name.strip()} vs {away_name.strip()}"
-  else:
-    match_name = str(
-        match.get("title") or match.get("name") or "Trận đấu"
-    ).strip()
-
-  logo = (
-      (home_obj.get("logo") if isinstance(home_obj, dict) else "")
-      or match.get("home_logo")
-      or match.get("logo")
-      or ""
-  )
-
-  ts = (
-      match.get("time_start")
-      or match.get("timestamp")
-      or match.get("match_time")
-  )
-  time_str = ""
-  if ts:
-    try:
-      ts_int = int(ts)
-      if ts_int > 1e11:
-        ts_int //= 1000
-      dt = datetime.datetime.fromtimestamp(ts_int, tz=TZ_VN)
-      time_str = dt.strftime("%H:%M %d/%m")
-    except Exception:
-      pass
-
-  if not time_str:
-    time_str = datetime.datetime.now(TZ_VN).strftime("%H:%M %d/%m")
-
-  blv_raw = match.get("blv") or match.get("commentator") or ""
-  blv_str = clean_blv_name(blv_raw)
-
-  sport_type = (
-      match.get("type")
-      or match.get("sport_type")
-      or match.get("category")
-      or ""
-  )
-  league_obj = match.get("league") or match.get("tournament") or {}
-  league_title = (
-      league_obj.get("title") or league_obj.get("name") or ""
-      if isinstance(league_obj, dict)
-      else str(league_obj)
-  )
-  emoji = get_sport_emoji(str(sport_type), str(league_title), match_name)
-
-  return {
-      "key": f"{match_name.lower().strip()}_{time_str}_{blv_str.lower().strip()}",
-      "match_name": match_name,
-      "logo": logo,
-      "time_str": time_str,
-      "blv_str": blv_str,
-      "emoji": emoji,
-      "stream_url": stream_url,
-      "is_live": is_live,
-  }
+  return list(set(links))
 
 
 def main():
   now_vn = datetime.datetime.now(TZ_VN)
 
-  # Lấy danh sách trận đấu từ các nguồn
+  # Các endpoint chứa dữ liệu trận đấu live
   api_sources = [
       "https://live-api.keonhacaitp.one/storage/livestream/live.json",
       "https://api.giovang.co/storage/livestream/live.json",
       "https://live-api.keonhacaitp.one/storage/livestream/home.json",
+      "https://live-api.keonhacaitp.one/storage/livestream/match.json",
   ]
 
-  for i in range(-1, 2):
-    day = now_vn + datetime.timedelta(days=i)
-    api_sources.append(
-        f"https://live-api.keonhacaitp.one/storage/livestream/date/{day.strftime('%d-%m-%Y')}.json"
-    )
+  today_str = now_vn.strftime("%d-%m-%Y")
+  api_sources.append(
+      f"https://live-api.keonhacaitp.one/storage/livestream/date/{today_str}.json"
+  )
 
-  unique_matches = {}
+  raw_matches = []
   with ThreadPoolExecutor(max_workers=10) as executor:
     futures = [executor.submit(fetch_url, url) for url in api_sources]
     for future in as_completed(futures):
@@ -241,46 +145,132 @@ def main():
           if isinstance(items, list):
             for item in items:
               if isinstance(item, dict):
-                m_id = item.get("id") or item.get("match_id")
-                if m_id:
-                  unique_matches[m_id] = item
+                raw_matches.append(item)
         except Exception:
           pass
 
-  # Chạy đa luồng bóc tách link từng trận
-  playlist_dict = {}
-  with ThreadPoolExecutor(max_workers=15) as executor:
-    futures = [
-        executor.submit(process_single_match, m)
-        for m in unique_matches.values()
-    ]
-    for future in as_completed(futures):
-      res = future.result()
-      k = res["key"]
-      if k not in playlist_dict or (
-          not playlist_dict[k]["is_live"] and res["is_live"]
-      ):
-        playlist_dict[k] = res
+  channels_list = []
 
+  for match in raw_matches:
+    match_str = json.dumps(match)
+    stream_links = extract_all_m3u8(match_str)
+
+    # Lấy thông tin trận đấu
+    teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
+    home_obj = (
+        teams.get("home") or match.get("home") or match.get("home_team") or {}
+    )
+    away_obj = (
+        teams.get("away") or match.get("away") or match.get("away_team") or {}
+    )
+
+    home_name = (
+        home_obj.get("name") if isinstance(home_obj, dict) else str(home_obj)
+    ) or match.get("home_name", "")
+    away_name = (
+        away_obj.get("name") if isinstance(away_obj, dict) else str(away_obj)
+    ) or match.get("away_name", "")
+
+    if home_name and away_name and home_name != "None" and away_name != "None":
+      match_name = f"{home_name.strip()} vs {away_name.strip()}"
+    else:
+      match_name = str(
+          match.get("title") or match.get("name") or "Trận đấu"
+      ).strip()
+
+    logo = (
+        (home_obj.get("logo") if isinstance(home_obj, dict) else "")
+        or match.get("home_logo")
+        or match.get("logo")
+        or ""
+    )
+
+    ts = (
+        match.get("time_start")
+        or match.get("timestamp")
+        or match.get("match_time")
+    )
+    time_str = ""
+    if ts:
+      try:
+        ts_int = int(ts)
+        if ts_int > 1e11:
+          ts_int //= 1000
+        dt = datetime.datetime.fromtimestamp(ts_int, tz=TZ_VN)
+        time_str = dt.strftime("%H:%M %d/%m")
+      except Exception:
+        pass
+    if not time_str:
+      time_str = now_vn.strftime("%H:%M %d/%m")
+
+    blv_raw = match.get("blv") or match.get("commentator") or ""
+    blv_str = clean_blv_name(blv_raw)
+
+    sport_type = (
+        match.get("type")
+        or match.get("sport_type")
+        or match.get("category")
+        or ""
+    )
+    league_obj = match.get("league") or match.get("tournament") or {}
+    league_title = (
+        league_obj.get("title") or league_obj.get("name") or ""
+        if isinstance(league_obj, dict)
+        else str(league_title)
+        if "league_title" in locals()
+        else ""
+    )
+    emoji = get_sport_emoji(str(sport_type), str(league_title), match_name)
+
+    # Nếu có link phát trực tiếp
+    if stream_links:
+      for idx, link in enumerate(stream_links):
+        server_tag = f" [SV{idx+1}]" if len(stream_links) > 1 else ""
+        channels_list.append({
+            "title": (
+                f"🟢 {time_str} {emoji} {match_name}{blv_str}{server_tag} [hls]"
+            ),
+            "logo": logo,
+            "url": link,
+            "is_live": True,
+            "key": f"{match_name}_{time_str}_{blv_str}_{idx}",
+        })
+    else:
+      # Link dự phòng nếu chưa lên sóng
+      channels_list.append({
+          "title": f"🟡 {time_str} {emoji} {match_name}{blv_str} [hls]",
+          "logo": logo,
+          "url": "https://freem3u.xyz/static/no-signal/low.m3u8",
+          "is_live": False,
+          "key": f"{match_name}_{time_str}_{blv_str}_nosig",
+      })
+
+  # Lọc trùng lặp
+  seen_keys = set()
+  final_channels = []
+  for ch in channels_list:
+    if ch["key"] not in seen_keys:
+      seen_keys.add(ch["key"])
+      final_channels.append(ch)
+
+  # Tạo nội dung playlist.m3u
   m3u_lines = ["#EXTM3U\n"]
   m3u_lines.append(
       f"# Updated at {datetime.datetime.now(TZ_VN).strftime('%Y-%m-%d %H:%M:%S')}"
   )
 
-  for item in playlist_dict.values():
-    status_icon = "🟢 " if item["is_live"] else "🟡 "
-    title = f"{status_icon}{item['time_str']} {item['emoji']} {item['match_name']}{item['blv_str']} [hls]"
+  for ch in final_channels:
     m3u_lines.append(
-        f'#EXTINF:-1 tvg-logo="{item["logo"]}" group-title="Giờ Vàng TV" ,'
-        f" {title}"
+        f'#EXTINF:-1 tvg-logo="{ch["logo"]}" group-title="Giờ Vàng TV" ,'
+        f" {ch['title']}"
     )
-    m3u_lines.append(item["stream_url"])
+    m3u_lines.append(ch["url"])
     m3u_lines.append("")
 
   with open("playlist.m3u", "w", encoding="utf-8") as f:
     f.write("\n".join(m3u_lines))
 
-  print("Đã cập nhật playlist thành công!")
+  print("Cập nhật playlist.m3u thành công!")
 
 
 if __name__ == "__main__":
