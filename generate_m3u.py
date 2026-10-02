@@ -11,9 +11,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Múi giờ Việt Nam (GMT+7)
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
+# Full Header giả lập trình duyệt Chrome thật
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Ch-Ua": '"Chromium";v="128", "Not=A?Brand";v="24", "Google Chrome";v="128"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
     "Referer": "https://giovang.rent/",
 }
 
@@ -44,8 +56,8 @@ def get_sport_emoji(sport_type="", league="", team=""):
     return "⚽"
 
 
-def fetch_url(url, timeout=10):
-    """Tải dữ liệu URL kèm bypass SSL"""
+def fetch_url(url, timeout=12):
+    """Tải dữ liệu URL kèm bypass SSL & Header"""
     sep = "&" if "?" in url else "?"
     full_url = f"{url}{sep}t={int(time.time())}"
     req = urllib.request.Request(full_url, headers=HEADERS)
@@ -54,8 +66,8 @@ def fetch_url(url, timeout=10):
             if resp.status == 200:
                 text = resp.read().decode("utf-8", errors="ignore")
                 return text.replace("\\/", "/")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[LỖI FETCH] {url}: {e}")
     return None
 
 
@@ -64,29 +76,36 @@ def build_vcdn_url(stream_id):
     if not stream_id:
         return None
     s_id = str(stream_id).strip()
-    if len(s_id) in [9, 10, 11] and s_id.isdigit():
+    # Bắt tất cả chuỗi số có độ dài từ 8 đến 11 chữ số
+    if len(s_id) in [8, 9, 10, 11] and s_id.isdigit():
         return f"https://ftlh5sc02iliv.vcdn.cloud/{s_id}_hd/{s_id}_hd@720p.m3u8"
     return None
 
 
 def extract_stream_from_match(match):
     """Lấy link stream trực tiếp từ match object"""
-    stream_id = match.get("fi") or match.get("room_id") or match.get("stream_id")
-    vcdn_link = build_vcdn_url(stream_id)
-    if vcdn_link:
-        return vcdn_link
+    # 1. Kiểm tra trực tiếp các trường ID phổ biến
+    for key in ["fi", "room_id", "stream_id", "live_id", "channel_id", "cdn"]:
+        val = match.get(key)
+        vcdn_link = build_vcdn_url(val)
+        if vcdn_link:
+            return vcdn_link
 
+    # 2. Đệ quy tìm kiếm m3u8 hoặc ID số trong toàn bộ object
     def search_m3u8(obj):
-        if isinstance(obj, str):
+        if isinstance(obj, (int, float)):
+            return build_vcdn_url(obj)
+        elif isinstance(obj, str):
             if "vcdn.cloud" in obj or (".m3u8" in obj and "no-signal" not in obj):
                 m = re.search(r'https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*', obj)
                 if m:
                     return m.group(0)
-            m_id = re.search(r"\b(1\d{8,10})\b", obj)
+            # Quét tìm ID từ 8 đến 11 chữ số
+            m_id = re.search(r"\b(\d{8,11})\b", obj)
             if m_id:
                 return build_vcdn_url(m_id.group(1))
         elif isinstance(obj, dict):
-            for v in obj.values():
+            for k, v in obj.items():
                 res = search_m3u8(v)
                 if res:
                     return res
@@ -121,7 +140,10 @@ def extract_matches_from_html(html_content):
 
             def traverse_find_matches(obj):
                 if isinstance(obj, dict):
-                    if any(k in obj for k in ["home", "away", "teams", "room_id", "title"]):
+                    if any(
+                        k in obj
+                        for k in ["home", "away", "teams", "room_id", "title", "fi"]
+                    ):
                         matches.append(obj)
                     for v in obj.values():
                         traverse_find_matches(v)
@@ -130,8 +152,8 @@ def extract_matches_from_html(html_content):
                         traverse_find_matches(item)
 
             traverse_find_matches(data.get("props", {}))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[LỖI PARSE HTML JSON]: {e}")
     return matches
 
 
@@ -149,8 +171,12 @@ def main():
         day = now_vn + datetime.timedelta(days=i)
         d1 = day.strftime("%d-%m-%Y")
         d2 = day.strftime("%Y-%m-%d")
-        api_sources.append(f"https://live-api.keonhacaitp.one/storage/livestream/date/{d1}.json")
-        api_sources.append(f"https://live-api.keonhacaitp.one/storage/livestream/date/{d2}.json")
+        api_sources.append(
+            f"https://live-api.keonhacaitp.one/storage/livestream/date/{d1}.json"
+        )
+        api_sources.append(
+            f"https://live-api.keonhacaitp.one/storage/livestream/date/{d2}.json"
+        )
 
     web_sources = [
         "https://giovang.rent/",
@@ -161,9 +187,11 @@ def main():
     all_matches_dict = {}
 
     # 1. Cào nguồn API JSON
+    print("--- BẮT ĐẦU CÀO DỮ LIỆU API JSON ---")
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_url = {executor.submit(fetch_url, url): url for url in api_sources}
         for future in as_completed(future_to_url):
+            url = future_to_url[future]
             raw_text = future.result()
             if raw_text:
                 try:
@@ -174,6 +202,7 @@ def main():
                         or (data if isinstance(data, list) else [])
                     )
                     if isinstance(items, list):
+                        print(f"[OK] {url} -> {len(items)} trận")
                         for item in items:
                             if isinstance(item, dict):
                                 m_id = (
@@ -185,16 +214,19 @@ def main():
                                 )
                                 if m_id and str(m_id) not in all_matches_dict:
                                     all_matches_dict[str(m_id)] = item
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[LỖI JSON] {url}: {e}")
 
     # 2. Cào trang HTML
+    print("--- BẮT ĐẦU CÀO TRANG HTML ---")
     with ThreadPoolExecutor(max_workers=5) as executor:
         future_to_url = {executor.submit(fetch_url, url): url for url in web_sources}
         for future in as_completed(future_to_url):
+            url = future_to_url[future]
             html_text = future.result()
             if html_text:
                 extracted = extract_matches_from_html(html_text)
+                print(f"[OK HTML] {url} -> {len(extracted)} trận")
                 for item in extracted:
                     m_id = (
                         item.get("id")
@@ -231,9 +263,12 @@ def main():
 
     # 5. Xuất Playlist M3U tối giản chuẩn mẫu
     m3u_lines = ["#EXTM3U\n"]
+    live_count = 0
 
     for match in valid_matches:
         stream_url = extract_stream_from_match(match)
+        if "vcdn.cloud" in stream_url:
+            live_count += 1
 
         teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
         home_name = (
@@ -272,12 +307,11 @@ def main():
             )
 
         blv_list = match.get("blv", [])
+        blv_str = ""
         if isinstance(blv_list, list) and blv_list:
             blv_str = f" ({', '.join([str(b) for b in blv_list])})"
         elif isinstance(blv_list, str) and blv_list.strip():
             blv_str = f" ({blv_list.strip()})"
-        else:
-            blv_str = ""
 
         sport_type = match.get("type") or match.get("sport_type") or ""
         league_title = (
@@ -291,7 +325,6 @@ def main():
         status_icon = "🟢 " if not is_no_signal else "🟡 "
         title = f"{status_icon}{time_str} {emoji} {match_name}{blv_str} [hls]"
 
-        # Ghi 2 dòng chuẩn mẫu
         m3u_lines.append(
             f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}'
         )
@@ -302,7 +335,7 @@ def main():
         f.write("\n".join(m3u_lines))
 
     print(
-        f"Hoàn tất! Đã tạo file playlist.m3u chuẩn mẫu cho {len(valid_matches)} trận đấu.",
+        f"Hoàn tất! Tổng cộng {len(valid_matches)} trận (trong đó có {live_count} trận bắt được link Stream VCDN).",
         flush=True,
     )
 
