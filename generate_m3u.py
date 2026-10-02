@@ -72,7 +72,7 @@ def clean_blv_name(blv_raw):
   return f" ({name})" if name else ""
 
 
-def fetch_url(url, timeout=12):
+def fetch_url(url, timeout=10):
   sep = "&" if "?" in url else "?"
   full_url = f"{url}{sep}t={int(time.time())}"
   req = urllib.request.Request(full_url, headers=HEADERS)
@@ -86,85 +86,52 @@ def fetch_url(url, timeout=12):
   return None
 
 
-def find_stream_url(obj):
-  """Tìm link .m3u8 hoặc room_id từ dict/object bất kỳ"""
-  if not obj:
+def extract_stream_from_text(text):
+  if not text:
     return None
 
-  obj_str = json.dumps(obj)
-
-  # 1. Quét trực tiếp link .m3u8 trong JSON
-  m3u8_matches = re.findall(
-      r"https?://[^\s\"']+\.m3u8[^\s\"']*", obj_str, re.IGNORECASE
+  # 1. Tìm trực tiếp URL m3u8
+  m3u8s = re.findall(
+      r"https?://[^\s\"']+\.m3u8[^\s\"']*", text, re.IGNORECASE
   )
-  for link in m3u8_matches:
-    if "no-signal" not in link:
-      return link
+  for m in m3u8s:
+    if "no-signal" not in m:
+      return m
 
-  # 2. Tìm ID phòng live (dạng 9-11 chữ số)
-  room_ids = re.findall(r"\b(1[789]\d{7,9})\b", obj_str)
-  if room_ids:
-    return f"https://ftlh5sc02iliv.vcdn.cloud/{room_ids[0]}_hd/{room_ids[0]}_hd@720p.m3u8"
+  # 2. Tìm Room ID dạng 178xxxxxxx, 179xxxxxxx, 180xxxxxxx...
+  ids = re.findall(r"\b(1[789]\d{7,9})\b", text)
+  if ids:
+    return f"https://ftlh5sc02iliv.vcdn.cloud/{ids[0]}_hd/{ids[0]}_hd@720p.m3u8"
+
+  # 3. Quét bất kỳ chuỗi số nào trong field room_id
+  room_matches = re.findall(r'"room_id"\s*:\s*"?(\d+)"?', text)
+  for r_id in room_matches:
+    if len(r_id) >= 6:
+      return f"https://ftlh5sc02iliv.vcdn.cloud/{r_id}_hd/{r_id}_hd@720p.m3u8"
 
   return None
 
 
-def extract_rooms_from_match(match):
-  rooms_data = []
+def process_single_match(match):
+  m_id = match.get("id") or match.get("match_id")
+  match_str = json.dumps(match)
 
-  # Lấy danh sách BLV/Phòng live nếu có
-  candidates = []
-  for k in [
-      "relate_rooms",
-      "rooms",
-      "blv_list",
-      "blvs",
-      "commentators",
-      "channels",
-  ]:
-    val = match.get(k)
-    if isinstance(val, list) and len(val) > 0:
-      candidates = val
-      break
+  stream_url = extract_stream_from_text(match_str)
 
-  if candidates:
-    for r in candidates:
-      if isinstance(r, dict):
-        blv_name = (
-            r.get("name")
-            or r.get("blv_name")
-            or r.get("nickname")
-            or r.get("commentator")
-            or r.get("title")
-            or ""
-        )
-        url = find_stream_url(r) or find_stream_url(match)
-        if url:
-          rooms_data.append(
-              {"blv": blv_name, "stream_url": url, "is_valid": True}
-          )
-      elif isinstance(r, str):
-        url = find_stream_url(match)
-        if url:
-          rooms_data.append({"blv": r, "stream_url": url, "is_valid": True})
+  # Nếu không có link trong JSON tổng, gọi API chi tiết của trận đó
+  if not stream_url and m_id:
+    detail_url = f"https://live-api.keonhacaitp.one/storage/livestream/match/{m_id}.json"
+    detail_text = fetch_url(detail_url)
+    if detail_text:
+      stream_url = extract_stream_from_text(detail_text)
 
-  if not rooms_data:
-    blv_name = match.get("blv") or match.get("commentator") or ""
-    url = find_stream_url(match)
-    if url:
-      rooms_data.append({"blv": blv_name, "stream_url": url, "is_valid": True})
-    else:
-      # Nếu trận chưa/không có link live thì mới dùng link fallback
-      rooms_data.append({
-          "blv": blv_name,
-          "stream_url": "https://freem3u.xyz/static/no-signal/low.m3u8",
-          "is_valid": False,
-      })
+  # Fallback cuối cùng nếu thực sự chưa phát live
+  is_live = True
+  if not stream_url:
+    stream_url = "https://freem3u.xyz/static/no-signal/low.m3u8"
+    is_live = False
 
-  return rooms_data
-
-
-def extract_match_info(match):
+  # Xử lý thông tin trận đấu
   teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
   home_obj = (
       teams.get("home") or match.get("home") or match.get("home_team") or {}
@@ -187,25 +154,17 @@ def extract_match_info(match):
         match.get("title") or match.get("name") or "Trận đấu"
     ).strip()
 
-  logo = ""
-  if isinstance(home_obj, dict) and home_obj.get("logo"):
-    logo = home_obj["logo"]
-  elif isinstance(away_obj, dict) and away_obj.get("logo"):
-    logo = away_obj["logo"]
-
-  if not logo:
-    logo = (
-        match.get("home_logo")
-        or match.get("away_logo")
-        or match.get("logo")
-        or ""
-    )
+  logo = (
+      (home_obj.get("logo") if isinstance(home_obj, dict) else "")
+      or match.get("home_logo")
+      or match.get("logo")
+      or ""
+  )
 
   ts = (
       match.get("time_start")
       or match.get("timestamp")
       or match.get("match_time")
-      or match.get("time")
   )
   time_str = ""
   if ts:
@@ -221,6 +180,9 @@ def extract_match_info(match):
   if not time_str:
     time_str = datetime.datetime.now(TZ_VN).strftime("%H:%M %d/%m")
 
+  blv_raw = match.get("blv") or match.get("commentator") or ""
+  blv_str = clean_blv_name(blv_raw)
+
   sport_type = (
       match.get("type")
       or match.get("sport_type")
@@ -233,51 +195,44 @@ def extract_match_info(match):
       if isinstance(league_obj, dict)
       else str(league_obj)
   )
-
   emoji = get_sport_emoji(str(sport_type), str(league_title), match_name)
 
   return {
+      "key": f"{match_name.lower().strip()}_{time_str}_{blv_str.lower().strip()}",
       "match_name": match_name,
       "logo": logo,
       "time_str": time_str,
+      "blv_str": blv_str,
       "emoji": emoji,
+      "stream_url": stream_url,
+      "is_live": is_live,
   }
 
 
 def main():
   now_vn = datetime.datetime.now(TZ_VN)
 
+  # Lấy danh sách trận đấu từ các nguồn
   api_sources = [
       "https://live-api.keonhacaitp.one/storage/livestream/live.json",
       "https://api.giovang.co/storage/livestream/live.json",
-      "https://api.giovang.co/api/v1/matches/live",
       "https://live-api.keonhacaitp.one/storage/livestream/home.json",
-      "https://live-api.keonhacaitp.one/storage/livestream/match.json",
-      "https://live-api.keonhacaitp.one/storage/livestream/schedule.json",
   ]
 
   for i in range(-1, 2):
     day = now_vn + datetime.timedelta(days=i)
-    d1 = day.strftime("%d-%m-%Y")
-    d2 = day.strftime("%Y-%m-%d")
     api_sources.append(
-        f"https://live-api.keonhacaitp.one/storage/livestream/date/{d1}.json"
-    )
-    api_sources.append(
-        f"https://live-api.keonhacaitp.one/storage/livestream/date/{d2}.json"
+        f"https://live-api.keonhacaitp.one/storage/livestream/date/{day.strftime('%d-%m-%Y')}.json"
     )
 
-  raw_matches = []
-
+  unique_matches = {}
   with ThreadPoolExecutor(max_workers=10) as executor:
-    future_to_url = {
-        executor.submit(fetch_url, url): url for url in api_sources
-    }
-    for future in as_completed(future_to_url):
-      raw_text = future.result()
-      if raw_text:
+    futures = [executor.submit(fetch_url, url) for url in api_sources]
+    for future in as_completed(futures):
+      text = future.result()
+      if text:
         try:
-          data = json.loads(raw_text)
+          data = json.loads(text)
           items = (
               data.get("response")
               or data.get("data")
@@ -286,39 +241,26 @@ def main():
           if isinstance(items, list):
             for item in items:
               if isinstance(item, dict):
-                raw_matches.append(item)
+                m_id = item.get("id") or item.get("match_id")
+                if m_id:
+                  unique_matches[m_id] = item
         except Exception:
           pass
 
+  # Chạy đa luồng bóc tách link từng trận
   playlist_dict = {}
-
-  for match in raw_matches:
-    info = extract_match_info(match)
-    rooms = extract_rooms_from_match(match)
-
-    for room in rooms:
-      stream_url = room["stream_url"]
-      blv_str = clean_blv_name(room["blv"])
-      is_valid = room["is_valid"]
-
-      match_key = f"{info['match_name'].lower().strip()}_{info['time_str']}_{blv_str.lower().strip()}"
-
-      # Nếu đã có trong danh sách nhưng chưa có link thật mà lượt này tìm thấy link thật -> Ghi đè
-      if match_key in playlist_dict:
-        if not playlist_dict[match_key]["is_valid"] and is_valid:
-          playlist_dict[match_key] = {
-              "info": info,
-              "stream_url": stream_url,
-              "blv_str": blv_str,
-              "is_valid": is_valid,
-          }
-      else:
-        playlist_dict[match_key] = {
-            "info": info,
-            "stream_url": stream_url,
-            "blv_str": blv_str,
-            "is_valid": is_valid,
-        }
+  with ThreadPoolExecutor(max_workers=15) as executor:
+    futures = [
+        executor.submit(process_single_match, m)
+        for m in unique_matches.values()
+    ]
+    for future in as_completed(futures):
+      res = future.result()
+      k = res["key"]
+      if k not in playlist_dict or (
+          not playlist_dict[k]["is_live"] and res["is_live"]
+      ):
+        playlist_dict[k] = res
 
   m3u_lines = ["#EXTM3U\n"]
   m3u_lines.append(
@@ -326,27 +268,21 @@ def main():
   )
 
   for item in playlist_dict.values():
-    info = item["info"]
-    stream_url = item["stream_url"]
-    blv_str = item["blv_str"]
-    is_valid = item["is_valid"]
-
-    status_icon = "🟢 " if is_valid else "🟡 "
-    title = f"{status_icon}{info['time_str']} {info['emoji']} {info['match_name']}{blv_str} [hls]"
-
+    status_icon = "🟢 " if item["is_live"] else "🟡 "
+    title = f"{status_icon}{item['time_str']} {item['emoji']} {item['match_name']}{item['blv_str']} [hls]"
     m3u_lines.append(
-        f'#EXTINF:-1 tvg-logo="{info["logo"]}" group-title="Giờ Vàng TV" ,'
+        f'#EXTINF:-1 tvg-logo="{item["logo"]}" group-title="Giờ Vàng TV" ,'
         f" {title}"
     )
-    m3u_lines.append(stream_url)
+    m3u_lines.append(item["stream_url"])
     m3u_lines.append("")
 
   with open("playlist.m3u", "w", encoding="utf-8") as f:
     f.write("\n".join(m3u_lines))
 
-  print("Đã cập nhật playlist.m3u!")
+  print("Đã cập nhật playlist thành công!")
 
 
 if __name__ == "__main__":
   main()
-      
+    
