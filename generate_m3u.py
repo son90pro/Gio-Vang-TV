@@ -25,7 +25,6 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 def get_sport_emoji(sport_type="", league="", match_name=""):
-  """Nhận diện chính xác emoji môn thể thao"""
   s = f"{sport_type} {league} {match_name}".lower()
   if any(k in s for k in ["basketball", "bóng rổ", "nba"]):
     return "🏀"
@@ -54,7 +53,6 @@ def get_sport_emoji(sport_type="", league="", match_name=""):
 
 
 def clean_blv_name(blv_raw):
-  """Định dạng tên BLV chuẩn mẫu"""
   if not blv_raw:
     return ""
   if isinstance(blv_raw, list):
@@ -78,6 +76,27 @@ def clean_blv_name(blv_raw):
   return f" ({name})"
 
 
+def extract_any_id(match_obj):
+  """Quét triệt để lấy ID 10 chữ số của Giờ Vàng (ví dụ: 1790911629)"""
+  # 1. Kiểm tra các field thông dụng
+  for key in ["id", "room_id", "fi", "live_id", "stream_id", "match_id"]:
+    val = match_obj.get(key)
+    if val and str(val).isdigit() and len(str(val)) in [9, 10]:
+      return str(val)
+
+  # 2. Quét thẳng Regex trong toàn bộ chuỗi JSON thô
+  raw_str = json.dumps(match_obj)
+  found = re.findall(r"\b(179\d{7})\b", raw_str)
+  if found:
+    return found[0]
+
+  found_any = re.findall(r"\b(\d{9,10})\b", raw_str)
+  if found_any:
+    return found_any[0]
+
+  return None
+
+
 def fetch_url(url, timeout=10):
   sep = "&" if "?" in url else "?"
   full_url = f"{url}{sep}t={int(time.time())}"
@@ -89,32 +108,6 @@ def fetch_url(url, timeout=10):
         return text.replace("\\/", "/")
   except Exception:
     pass
-  return None
-
-
-def get_real_room_id(match_obj):
-  """Lấy chính xác Room ID phát sóng từ JSON dữ liệu gốc"""
-  # Ưu tiên các trường chứa ID phòng live thực tế
-  for key in ["room_id", "fi", "live_id", "stream_id"]:
-    val = match_obj.get(key)
-    if val and str(val).isdigit() and len(str(val)) in [9, 10]:
-      return str(val)
-
-  # Quét từ mảng links hoặc servers nếu có
-  servers = match_obj.get("servers") or match_obj.get("links") or []
-  if isinstance(servers, list):
-    for srv in servers:
-      if isinstance(srv, dict):
-        sid = srv.get("room_id") or srv.get("id") or srv.get("stream_id")
-        if sid and str(sid).isdigit() and len(str(sid)) in [9, 10]:
-          return str(sid)
-
-  # Tìm ID dạng 10 chữ số bắt đầu bằng 179... trong toàn bộ JSON object
-  match_str = json.dumps(match_obj)
-  ids = re.findall(r'"(?:room_id|fi|id|live_id)"\s*:\s*"?(\d{9,10})"?', match_str)
-  if ids:
-    return ids[0]
-
   return None
 
 
@@ -157,9 +150,9 @@ def main():
   seen_keys = set()
 
   for match in raw_matches:
-    room_id = get_real_room_id(match)
+    match_id = extract_any_id(match)
 
-    # Lấy tên 2 đội
+    # Tên đội
     teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
     home_obj = (
         teams.get("home") or match.get("home") or match.get("home_team") or {}
@@ -187,13 +180,11 @@ def main():
           match.get("title") or match.get("name") or "Trận đấu"
       ).strip()
 
-    # Khóa chống trùng lặp trận
     unique_key = f"{match_name}_{match.get('time_start', '')}"
     if unique_key in seen_keys:
       continue
     seen_keys.add(unique_key)
 
-    # Logo
     logo = (
         (home_obj.get("logo") if isinstance(home_obj, dict) else "")
         or match.get("home_logo")
@@ -201,14 +192,14 @@ def main():
         or "https://giovang.co/favicon.ico"
     )
 
-    # Thời gian thi đấu & Kiểm tra trạng thái Đang đá (LIVE)
+    # Thời gian
     ts = (
         match.get("time_start")
         or match.get("timestamp")
         or match.get("match_time")
     )
     time_str = ""
-    is_live = False
+    dt = None
 
     if ts:
       try:
@@ -217,16 +208,20 @@ def main():
           ts_int //= 1000
         dt = datetime.datetime.fromtimestamp(ts_int, tz=TZ_VN)
         time_str = dt.strftime("%H:%M %d/%m")
-
-        # Trận đã diễn ra hoặc đang trong khung giờ thi đấu
-        if dt <= now_vn + datetime.timedelta(minutes=15):
-          is_live = True
       except Exception:
         pass
 
     if not time_str:
       time_str = now_vn.strftime("%H:%M %d/%m")
-      is_live = True
+
+    # BẮT TRẠNG THÁI LIVE:
+    # Nếu có match_id VÀ (không có mốc giờ HOẶC trận đấu diễn ra trong khoảng từ quá khứ đến +30 phút nữa)
+    is_live = False
+    if match_id:
+      if dt is None:
+        is_live = True
+      elif dt <= now_vn + datetime.timedelta(minutes=30):
+        is_live = True
 
     blv_raw = match.get("blv") or match.get("commentator") or ""
     blv_str = clean_blv_name(blv_raw)
@@ -245,10 +240,10 @@ def main():
     )
     emoji = get_sport_emoji(str(sport_type), str(league_title), match_name)
 
-    # Xử lý đường dẫn stream
-    if is_live and room_id:
+    # ĐIỀU KIỆN CHỦ CHỐT: hễ is_live và có match_id là NẠP LINK VCDN THẬT!
+    if is_live and match_id:
       status_icon = "🟢 "
-      stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{room_id}_hd/{room_id}_hd@720p.m3u8"
+      stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{match_id}_hd/{match_id}_hd@720p.m3u8"
     else:
       status_icon = ""
       stream_url = "https://freem3u.xyz/static/no-signal/low.m3u8"
@@ -261,7 +256,7 @@ def main():
         "url": stream_url,
     })
 
-  # Xuất file M3U chuẩn khớp 100% với file mẫu
+  # Xuất file M3U chuẩn
   m3u_lines = ["#EXTM3U\n"]
   for entry in playlist_entries:
     m3u_lines.append(
@@ -274,10 +269,9 @@ def main():
   with open("playlist.m3u", "w", encoding="utf-8") as f:
     f.write("\n".join(m3u_lines))
 
-  print(
-      f"Hoàn thành xuất {len(playlist_entries)} trận đấu vào file playlist.m3u!"
-  )
+  print("Đã cập nhật playlist thành công!")
 
 
 if __name__ == "__main__":
   main()
+    
