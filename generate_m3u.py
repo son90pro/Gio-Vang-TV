@@ -7,7 +7,6 @@ import urllib.request
 import zoneinfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Múi giờ Việt Nam (GMT+7)
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
 HEADERS = {
@@ -26,7 +25,6 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 def get_sport_emoji(sport_type="", league="", match_name=""):
-  """Phân loại biểu tượng môn thể thao"""
   s = f"{sport_type} {league} {match_name}".lower()
   if any(k in s for k in ["basketball", "bóng rổ", "nba", "aces", "fever"]):
     return "🏀"
@@ -50,7 +48,6 @@ def get_sport_emoji(sport_type="", league="", match_name=""):
 
 
 def clean_blv_name(blv_raw):
-  """Format tên BLV chuẩn: blv-can -> Cận, blv-vit -> Vịt, blv-mason -> Mason"""
   if not blv_raw:
     return ""
   if isinstance(blv_raw, list):
@@ -76,7 +73,6 @@ def clean_blv_name(blv_raw):
 
 
 def is_valid_room_id(val, match_time_start=None):
-  """Kiểm tra ID phòng live thật (tránh nhầm với time_start thi đấu)"""
   if not val:
     return False
   s = str(val).strip()
@@ -84,11 +80,9 @@ def is_valid_room_id(val, match_time_start=None):
     return False
 
   v = int(s)
-  # Nếu trùng khớp hoàn toàn với time_start thi đấu -> Loại bỏ (đó là mốc thời gian, không phải room_id)
   if match_time_start and v == int(match_time_start):
     return False
 
-  # Thời gian bắt đầu trận đấu luôn là số tròn chia hết cho 300 (5 phút). Room ID thật thì không.
   if (
       v % 300 == 0
       and match_time_start
@@ -118,25 +112,18 @@ def fetch_url(url, timeout=12):
 
 
 def extract_rooms_from_match(match):
-  """Trích xuất danh sách phòng phát / BLV chính xác nhất"""
   time_start = (
       match.get("time_start")
       or match.get("timestamp")
       or match.get("match_time")
   )
-
   match_str = json.dumps(match)
 
-  # 1. Tìm các link .m3u8 trực tiếp nếu có
   m3u8_links = re.findall(r"https?://[^\s\"']+\.m3u8", match_str)
-
-  # 2. Tìm tất cả số ID 10 chữ số hợp lệ dạng vcdn
   vcdn_ids = re.findall(r"\b(17[89]\d{7}|180\d{7})\b", match_str)
   valid_vcdn_ids = [s for s in vcdn_ids if is_valid_room_id(s, time_start)]
 
   rooms_data = []
-
-  # Lấy danh sách các phòng live con (relate_rooms / rooms / blv)
   candidates = []
   for k in [
       "relate_rooms",
@@ -209,7 +196,6 @@ def extract_rooms_from_match(match):
         )
         rooms_data.append({"room_id": r_id, "blv": r, "stream_url": url})
 
-  # Nếu không có danh sách phòng con, lấy trực tiếp trận đấu
   if not rooms_data:
     r_id = None
     for key in ["room_id", "live_id", "stream_id", "channel_id", "fi", "room"]:
@@ -297,66 +283,18 @@ def extract_match_info(match):
   )
 
   emoji = get_sport_emoji(str(sport_type), str(league_title), match_name)
-  status_code = str(
-      match.get("status_code") or match.get("status") or ""
-  ).upper()
 
   return {
       "match_name": match_name,
       "logo": logo,
       "time_str": time_str,
       "emoji": emoji,
-      "status_code": status_code,
   }
-
-
-def extract_matches_from_html(html_content):
-  """Lấy dữ liệu JSON từ HTML trang web"""
-  matches = []
-  if not html_content:
-    return matches
-
-  json_matches = re.findall(
-      r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
-      html_content,
-      re.DOTALL,
-  )
-  if json_matches:
-    try:
-      data = json.loads(json_matches[0])
-
-      def traverse(obj):
-        if isinstance(obj, dict):
-          if any(
-              k in obj
-              for k in [
-                  "relate_rooms",
-                  "room_id",
-                  "home_team",
-                  "away_team",
-                  "home",
-                  "away",
-              ]
-          ):
-            matches.append(obj)
-          for v in obj.values():
-            if isinstance(v, (dict, list)):
-              traverse(v)
-        elif isinstance(obj, list):
-          for item in obj:
-            if isinstance(item, (dict, list)):
-              traverse(item)
-
-      traverse(data.get("props", {}))
-    except Exception:
-      pass
-  return matches
 
 
 def main():
   now_vn = datetime.datetime.now(TZ_VN)
 
-  # Các nguồn API phát live (đưa nguồn live lên đầu)
   api_sources = [
       "https://live-api.keonhacaitp.one/storage/livestream/live.json",
       "https://api.giovang.co/storage/livestream/live.json",
@@ -377,16 +315,8 @@ def main():
         f"https://live-api.keonhacaitp.one/storage/livestream/date/{d2}.json"
     )
 
-  web_sources = [
-      "https://giovang.co/",
-      "https://giovang.rent/",
-      "https://giovang.city/",
-      "https://giovang.live/",
-  ]
-
   raw_matches = []
 
-  # 1. Tải dữ liệu từ API
   with ThreadPoolExecutor(max_workers=10) as executor:
     future_to_url = {
         executor.submit(fetch_url, url): url for url in api_sources
@@ -408,32 +338,10 @@ def main():
         except Exception:
           pass
 
-  # 2. Tải dữ liệu từ Web
-  with ThreadPoolExecutor(max_workers=5) as executor:
-    future_to_url = {
-        executor.submit(fetch_url, url): url for url in web_sources
-    }
-    for future in as_completed(future_to_url):
-      html_text = future.result()
-      if html_text:
-        extracted = extract_matches_from_html(html_text)
-        raw_matches.extend(extracted)
-
-  # 3. Tổng hợp và ưu tiên ghi đè link Live thật (🟢 vcdn.cloud)
   playlist_dict = {}
 
   for match in raw_matches:
     info = extract_match_info(match)
-
-    if info["status_code"] in [
-        "FINISHED",
-        "FT",
-        "ENDED",
-        "CANCELLED",
-        "POSTPONED",
-    ]:
-      continue
-
     rooms = extract_rooms_from_match(match)
 
     for room in rooms:
@@ -443,8 +351,6 @@ def main():
       match_key = f"{info['match_name'].lower().strip()}_{info['time_str']}_{blv_str.lower().strip()}"
       is_live = "vcdn.cloud" in stream_url
 
-      # Logic ghi đè: Nếu trận đấu đã có trong danh sách nhưng trước đó dính link no-signal,
-      # nếu gặp link vcdn.cloud thật -> Lập tức ghi đè link live!
       if match_key in playlist_dict:
         existing = playlist_dict[match_key]
         if not existing["is_live"] and is_live:
@@ -462,8 +368,12 @@ def main():
             "is_live": is_live,
         }
 
-  # 4. Xuất file M3U chuẩn
   m3u_lines = ["#EXTM3U\n"]
+
+  # Thêm comment chứa thời gian cập nhật để Git luôn nhận diện file có thay đổi
+  m3u_lines.append(
+      f"# Updated at {datetime.datetime.now(TZ_VN).strftime('%Y-%m-%d %H:%M:%S')}"
+  )
 
   for item in playlist_dict.values():
     info = item["info"]
@@ -489,4 +399,4 @@ def main():
 
 if __name__ == "__main__":
   main()
-    
+        
