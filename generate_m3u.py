@@ -10,10 +10,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Múi giờ Việt Nam (GMT+7)
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+REF = "https://giovang.rent/"
+
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "User-Agent": UA,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Referer": "https://giovang.rent/",
+    "Referer": REF,
 }
 
 SSL_CTX = ssl.create_default_context()
@@ -75,13 +78,11 @@ def fetch_url(url, timeout=12):
 
 def extract_stream_url(match):
     """Trích xuất link VCDN 10 chữ số chuẩn"""
-    # 1. Tìm ID trong các trường ưu tiên
     for key in ["room_id", "stream_id", "live_id", "fi", "id"]:
         val = match.get(key)
         if val and str(val).isdigit() and len(str(val)) in [9, 10, 11]:
             return f"https://ftlh5sc02iliv.vcdn.cloud/{val}_hd/{val}_hd@720p.m3u8"
 
-    # 2. Quét m3u8 hoặc chuỗi số trong match object
     match_str = json.dumps(match)
     m = re.search(r"https?://ftlh5sc02iliv\.vcdn\.cloud/\d+_hd/\d+_hd@720p\.m3u8", match_str)
     if m:
@@ -176,7 +177,7 @@ def main():
                     if m_id and str(m_id) not in all_matches_dict:
                         all_matches_dict[str(m_id)] = item
 
-    # 3. Lọc & Tạo danh sách M3U
+    # 3. Xuất M3U tích hợp Header Bypass cho TiviMate
     m3u_lines = ["#EXTM3U\n"]
 
     for match in all_matches_dict.values():
@@ -216,13 +217,21 @@ def main():
         title = f"{status_icon}{time_str} {emoji} {match_name}{blv_str} [hls]"
 
         m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}')
-        m3u_lines.append(stream_url)
+        
+        # Bổ sung 2 lớp Header Bypass (Cả EXTVLCOPT lẫn Pipe Syntax)
+        if is_live:
+            m3u_lines.append(f"#EXTVLCOPT:http-user-agent={UA}")
+            m3u_lines.append(f"#EXTVLCOPT:http-referrer={REF}")
+            m3u_lines.append(f"{stream_url}|User-Agent={UA}&Referer={REF}")
+        else:
+            m3u_lines.append(stream_url)
+
         m3u_lines.append("")
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print("Cập nhật thành công playlist.m3u theo chuẩn tttt.m3u!")
+    print("Cập nhật thành công playlist.m3u kèm Header bypass!")
 
 
 if __name__ == "__main__":
