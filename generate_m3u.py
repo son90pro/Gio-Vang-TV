@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Múi giờ Việt Nam (GMT+7)
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
-# Header chuẩn giả lập trình duyệt để cào web & gắn vào M3U
+# Header chuẩn giả lập trình duyệt để bypass CDN
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 REFERER = "https://giovang.rent/"
 
@@ -51,7 +51,7 @@ def get_sport_emoji(sport_type="", league="", team=""):
 
 
 def fetch_url(url, timeout=12):
-    """Tải dữ liệu từ URL kèm xử lý lỗi và bypass SSL"""
+    """Tải dữ liệu URL kèm bypass SSL"""
     sep = "&" if "?" in url else "?"
     full_url = f"{url}{sep}t={int(time.time())}"
     req = urllib.request.Request(full_url, headers=HEADERS)
@@ -65,86 +65,56 @@ def fetch_url(url, timeout=12):
     return None
 
 
-def find_vcdn_stream_url(obj):
-    """Quét đệ quy lấy luồng VCDN .m3u8 hoặc ID phòng 9-11 chữ số"""
-    if isinstance(obj, str):
-        if "vcdn.cloud" in obj or (".m3u8" in obj and "no-signal" not in obj and "http" in obj):
-            m = re.search(r'https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*', obj)
-            if m:
-                return m.group(0)
-
-        # Tìm ID dạng timestamp/roomid (ví dụ: 1790897629)
-        m_id = re.search(r"\b(1\d{8,10})\b", obj)
-        if m_id:
-            rid = m_id.group(1)
-            return f"https://ftlh5sc02iliv.vcdn.cloud/{rid}_hd/{rid}_hd@720p.m3u8"
-
-    elif isinstance(obj, int):
-        s_obj = str(obj)
-        if len(s_obj) in [9, 10, 11] and s_obj.startswith("1"):
-            return f"https://ftlh5sc02iliv.vcdn.cloud/{s_obj}_hd/{s_obj}_hd@720p.m3u8"
-
-    elif isinstance(obj, dict):
-        for k in [
-            "link", "url", "m3u8", "stream", "hls", "vcdn", 
-            "play_url", "embed", "src", "room_id", "room", "live_id", "stream_id"
-        ]:
-            if k in obj:
-                res = find_vcdn_stream_url(obj[k])
-                if res and "no-signal" not in res:
-                    return res
-
-        for v in obj.values():
-            res = find_vcdn_stream_url(v)
-            if res and "no-signal" not in res:
-                return res
-
-    elif isinstance(obj, list):
-        for item in obj:
-            res = find_vcdn_stream_url(item)
-            if res and "no-signal" not in res:
-                return res
-
+def build_vcdn_url(stream_id):
+    """Tạo đường dẫn VCDN chuẩn từ mã fi / stream_id"""
+    if not stream_id:
+        return None
+    s_id = str(stream_id).strip()
+    # Nếu là ID dạng số timestamp (ví dụ 1790897629)
+    if len(s_id) in [9, 10, 11] and s_id.isdigit():
+        return f"https://ftlh5sc02iliv.vcdn.cloud/{s_id}_hd/{s_id}_hd@720p.m3u8"
     return None
 
 
-def resolve_match_stream(match):
-    """Giải mã lấy link stream chính xác cho từng trận đấu"""
-    # 1. Kiểm tra trực tiếp trong dict của trận đấu
-    url = find_vcdn_stream_url(match)
-    if url:
-        return url
+def extract_stream_from_match(match):
+    """Lấy link stream trực tiếp từ match dictionary"""
+    # 1. Tìm trực tiếp từ trường fi / room_id / stream_id
+    stream_id = match.get("fi") or match.get("room_id") or match.get("stream_id")
+    vcdn_link = build_vcdn_url(stream_id)
+    if vcdn_link:
+        return vcdn_link
 
-    # 2. Nếu chưa có, truy vấn API phòng / chi tiết trận đấu
-    m_id = match.get("id") or match.get("fi") or match.get("room_id")
-    if m_id:
-        detail_urls = [
-            f"https://live-api.keonhacaitp.one/storage/livestream/fixture-detail/{m_id}.json",
-            f"https://live-api.keonhacaitp.one/storage/livestream/room/{m_id}.json",
-            f"https://giovang.rent/truc-tiep/{m_id}"
-        ]
-        for d_url in detail_urls:
-            raw = fetch_url(d_url, timeout=6)
-            if raw:
-                # Tìm trong JSON
-                try:
-                    data = json.loads(raw)
-                    url = find_vcdn_stream_url(data)
-                    if url:
-                        return url
-                except Exception:
-                    pass
-                # Tìm trong HTML / dplayer tag
-                url = find_vcdn_stream_url(raw)
-                if url:
-                    return url
+    # 2. Tìm đệ quy trong object nếu có link m3u8 sẵn
+    def search_m3u8(obj):
+        if isinstance(obj, str):
+            if "vcdn.cloud" in obj or (".m3u8" in obj and "no-signal" not in obj):
+                m = re.search(r'https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*', obj)
+                if m:
+                    return m.group(0)
+            m_id = re.search(r"\b(1\d{8,10})\b", obj)
+            if m_id:
+                return build_vcdn_url(m_id.group(1))
+        elif isinstance(obj, dict):
+            for v in obj.values():
+                res = search_m3u8(v)
+                if res:
+                    return res
+        elif isinstance(obj, list):
+            for item in obj:
+                res = search_m3u8(item)
+                if res:
+                    return res
+        return None
 
-    # 3. Trả về link dự phòng nếu trận chưa phát
+    res = search_m3u8(match)
+    if res:
+        return res
+
     return "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 
 def extract_matches_from_html(html_content):
-    """Trích xuất dữ liệu trận đấu từ __NEXT_DATA__ trong HTML"""
+    """Rút trích dữ liệu từ thẻ __NEXT_DATA__ trong trang HTML"""
     matches = []
     if not html_content:
         return matches
@@ -199,7 +169,7 @@ def main():
 
     all_matches_dict = {}
 
-    # 1. Cào nguồn API
+    # 1. Cào nguồn API JSON
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_url = {executor.submit(fetch_url, url): url for url in api_sources}
         for future in as_completed(future_to_url):
@@ -227,7 +197,7 @@ def main():
                 except Exception:
                     pass
 
-    # 2. Cào web HTML
+    # 2. Cào trang HTML
     with ThreadPoolExecutor(max_workers=5) as executor:
         future_to_url = {executor.submit(fetch_url, url): url for url in web_sources}
         for future in as_completed(future_to_url):
@@ -245,7 +215,7 @@ def main():
                     if m_id and str(m_id) not in all_matches_dict:
                         all_matches_dict[str(m_id)] = item
 
-    # 3. Lọc bỏ trận đã kết thúc
+    # 3. Lọc trận đấu chưa kết thúc
     valid_matches = []
     for m_id, match in all_matches_dict.items():
         status_code = str(match.get("status_code", "")).upper()
@@ -259,32 +229,20 @@ def main():
             continue
         valid_matches.append(match)
 
-    # 4. Giải mã tìm luồng phát trực tiếp song song cho tất cả các trận
-    match_stream_map = {}
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        future_to_match = {
-            executor.submit(resolve_match_stream, m): m for m in valid_matches
-        }
-        for future in as_completed(future_to_match):
-            m = future_to_match[future]
-            match_stream_map[str(m.get("id") or m.get("fi") or id(m))] = future.result()
-
-    # Sắp xếp: Ưu tiên trận có link vcdn.cloud phát được lên đầu
+    # 4. Sắp xếp: Ưu tiên trận đang LIVE lên đầu
     def sort_key(m):
-        m_key = str(m.get("id") or m.get("fi") or id(m))
-        st_url = match_stream_map.get(m_key, "")
+        st_url = extract_stream_from_match(m)
         ts = m.get("time_start") or 0
         has_vcdn = 0 if "vcdn.cloud" in st_url else 1
         return (has_vcdn, ts)
 
     valid_matches.sort(key=sort_key)
 
-    # 5. Xuất nội dung M3U chuẩn cho TiviMate
+    # 5. Xuất Playlist M3U chuẩn TiviMate
     m3u_lines = ["#EXTM3U\n"]
 
     for match in valid_matches:
-        m_key = str(match.get("id") or match.get("fi") or id(match))
-        stream_url = match_stream_map.get(m_key, "https://freem3u.xyz/static/no-signal/low.m3u8")
+        stream_url = extract_stream_from_match(match)
 
         teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
         home_name = (
@@ -342,14 +300,14 @@ def main():
         status_icon = "🟢 " if not is_no_signal else "🟡 "
         title = f"{status_icon}{time_str} {emoji} {match_name}{blv_str} [hls]"
 
-        # Ghi thẻ #EXTINF & Thẻ hỗ trợ TiviMate / VLC
+        # Thẻ thông tin M3U
         m3u_lines.append(
             f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV", {title}'
         )
         m3u_lines.append(f"#EXTVLCOPT:http-user-agent={USER_AGENT}")
         m3u_lines.append(f"#EXTVLCOPT:http-referrer={REFERER}")
 
-        # Thêm Pipe syntax (|User-Agent=...&Referer=...) trực tiếp vào đường dẫn
+        # Pipe syntax truyền trực tiếp Header vào URL cho TiviMate / VLC
         if not is_no_signal:
             final_url = f"{stream_url}|User-Agent={USER_AGENT}&Referer={REFERER}"
         else:
@@ -362,7 +320,7 @@ def main():
         f.write("\n".join(m3u_lines))
 
     print(
-        f"Hoàn tất! Đã tạo playlist.m3u chuẩn kèm Header cho {len(valid_matches)} trận đấu.",
+        f"Hoàn tất! Đã cập nhật playlist.m3u chuẩn cho {len(valid_matches)} trận đấu.",
         flush=True,
     )
 
