@@ -1,19 +1,22 @@
 #EXTM3U
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/dominican-republic.png" group-title="Giờ Vàng TV" , 🟡 07:00 02/10 ⚽ Cộng hòa Dominican vs Haiti (blv-sup) [hls]
-https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/dominican-republic.png" group-title="Giờ Vàng TV" , 🟢 07:00 02/10 ⚽ Cộng hòa Dominican vs Haiti (blv-sup) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790899200_hd/1790899200_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/IPmhSoEa-hvtJM6zJ.png" group-title="Giờ Vàng TV" , 🟡 07:00 02/10 ⚾ Atlanta Braves vs Philadelphia Phillies (blv-can) [hls]
-https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/IPmhSoEa-hvtJM6zJ.png" group-title="Giờ Vàng TV" , 🟢 07:00 02/10 ⚾ Atlanta Braves vs Philadelphia Phillies (blv-can) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790899200_hd/1790899200_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSS_IH32DVNx93gl9bC16jRCszOVgU2zy2ns7uv_Kp9fg&s=10" group-title="Giờ Vàng TV" , 🟡 07:15 02/10 🏈 Cleveland Browns vs Pittburgh Steelers (riko) [hls]
-https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSS_IH32DVNx93gl9bC16jRCszOVgU2zy2ns7uv_Kp9fg&s=10" group-title="Giờ Vàng TV" , 🟢 07:15 02/10 🏈 Cleveland Browns vs Pittburgh Steelers (riko) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790900100_hd/1790900100_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/cbf9424df17d6e06d655dca78651d329.png" group-title="Giờ Vàng TV" , 🟡 08:00 02/10 🏀 Las Vegas Aces vs Indiana Fever (blv-vit) [hls]
-https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/cbf9424df17d6e06d655dca78651d329.png" group-title="Giờ Vàng TV" , 🟢 08:00 02/10 🏀 Las Vegas Aces vs Indiana Fever (blv-vit) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/29432479_hd/29432479_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/nqz3kJDa-YB0DoGZt.png" group-title="Giờ Vàng TV" , 🟡 08:00 02/10 ⚽ Ấn Độ vs Hàn Quốc (blv-cay) [hls]
-https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/nqz3kJDa-YB0DoGZt.png" group-title="Giờ Vàng TV" , 🟢 08:00 02/10 ⚽ Ấn Độ vs Hàn Quốc (blv-cay) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790902800_hd/1790902800_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/seattle-sounders.png" group-title="Giờ Vàng TV" , 🟡 08:30 02/10 ⚽ Seattle Sounders vs Sporting Kansas City (blv-beo) [hls]
-https://freem3u.xyz/static/no-signal/low.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/seattle-sounders.png" group-title="Giờ Vàng TV" , 🟢 08:30 02/10 ⚽ Seattle Sounders vs Sporting Kansas City (blv-beo) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790904600_hd/1790904600_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcScASzyMboTqvaXcsCvqZO4pouOAu1HBj0MKVDdJhRvOY8MuXuWxc8j6CA&s=10" group-title="Giờ Vàng TV" , 🟢 09:00 02/10 🥎 tokyo Open vs 2026 (blv Mù) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790906400_hd/1790906400_hd@720p.m3u8
