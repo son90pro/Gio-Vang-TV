@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 TZ_VN = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
 
-# User-Agent & Referer bắt buộc để vượt rào CDN vcdn.cloud
+# Header chuẩn vượt tường rào CDN vcdn.cloud
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like"
     " Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -29,13 +29,12 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 def get_sport_emoji(sport_type="", league="", match_name=""):
+  """Nhận diện icon cho từng môn thể thao"""
   s = f"{sport_type} {league} {match_name}".lower()
   if any(k in s for k in ["basketball", "bóng rổ", "nba"]):
     return "🏀"
   if any(k in s for k in ["volleyball", "bóng chuyền"]):
     return "🏐"
-  if any(k in s for k in ["baseball", "bóng chày"]):
-    return "⚾"
   if any(
       k in s for k in ["tennis", "quần vợt", "softball", "wta", "atp", "open"]
   ):
@@ -45,16 +44,21 @@ def get_sport_emoji(sport_type="", league="", match_name=""):
       for k in ["esport", "esports", "lol", "dota", "valorant", "liên minh"]
   ):
     return "🎮"
-  if any(k in s for k in ["billiards", "bida", "pool", "9-ball"]):
+  if any(k in s for k in ["billiards", "bida", "bi a", "pool", "9-ball"]):
     return "🎱"
-  if any(k in s for k in ["f1", "formula1", "grand prix", "formula 1"]):
+  if any(
+      k in s for k in ["f1", "formula1", "formula 1", "grand prix", "racing"]
+  ):
     return "🏎️"
+  if any(k in s for k in ["mma", "one friday", "boxing", "ufc", "võ"]):
+    return "🥊"
   if any(k in s for k in ["american football", "nfl", "steelers", "browns"]):
-    return "🏈"
+    return "⚽"  # Hoặc 🏈
   return "⚽"
 
 
 def clean_blv_name(blv_raw):
+  """Làm sạch tên Bình luận viên đúng định dạng m3u mẫu"""
   if not blv_raw:
     return ""
   if isinstance(blv_raw, list):
@@ -72,7 +76,6 @@ def clean_blv_name(blv_raw):
   if not name or name.lower() in ["none", "null", "undefined"]:
     return ""
 
-  # Nếu tên đã có ngoặc tròn thì giữ nguyên, chưa có thì bọc lại
   if name.startswith("(") and name.endswith(")"):
     return f" {name}"
 
@@ -101,10 +104,8 @@ def fetch_url(url, timeout=10):
 
 
 def extract_room_id(match_obj):
-  """Trích xuất Room ID phục vụ ghép link CDN"""
+  """Bắt ID phòng live của Giờ Vàng (Dạng 10 chữ số)"""
   match_str = json.dumps(match_obj)
-
-  # Quét dạng ID 10 chữ số chuẩn của Giờ Vàng (vd: 1790911629)
   ids = re.findall(r"\b(179\d{7})\b", match_str)
   if ids:
     return ids[0]
@@ -124,7 +125,7 @@ def extract_room_id(match_obj):
 def main():
   now_vn = datetime.datetime.now(TZ_VN)
 
-  # Cào toàn bộ danh sách API đấu của Giờ Vàng
+  # Các API endpoint cào dữ liệu Giờ Vàng
   api_sources = [
       "https://live-api.keonhacaitp.one/storage/livestream/live.json",
       "https://api.giovang.co/storage/livestream/live.json",
@@ -164,7 +165,7 @@ def main():
     if not room_id:
       continue
 
-    # 1. Đội bóng / Tên trận đấu
+    # Tên đội / Trận đấu
     teams = match.get("teams") if isinstance(match.get("teams"), dict) else {}
     home_obj = (
         teams.get("home") or match.get("home") or match.get("home_team") or {}
@@ -192,7 +193,7 @@ def main():
           match.get("title") or match.get("name") or "Trận đấu"
       ).strip()
 
-    # 2. Logo
+    # Logo
     logo = (
         (home_obj.get("logo") if isinstance(home_obj, dict) else "")
         or match.get("home_logo")
@@ -200,7 +201,7 @@ def main():
         or "https://giovang.co/favicon.ico"
     )
 
-    # 3. Thời gian thi đấu
+    # Thời gian thi đấu & Trạng thái LIVE
     ts = (
         match.get("time_start")
         or match.get("timestamp")
@@ -217,8 +218,8 @@ def main():
         dt = datetime.datetime.fromtimestamp(ts_int, tz=TZ_VN)
         time_str = dt.strftime("%H:%M %d/%m")
 
-        # Kiểm tra xem trận đấu đã diễn ra chưa
-        if dt <= now_vn + datetime.timedelta(minutes=15):
+        # Nếu đã đến giờ đá hoặc đang diễn ra
+        if dt <= now_vn + datetime.timedelta(minutes=10):
           is_live = True
       except Exception:
         pass
@@ -227,7 +228,6 @@ def main():
       time_str = now_vn.strftime("%H:%M %d/%m")
       is_live = True
 
-    # 4. BLV & Môn thể thao
     blv_raw = match.get("blv") or match.get("commentator") or ""
     blv_str = clean_blv_name(blv_raw)
 
@@ -245,12 +245,17 @@ def main():
     )
     emoji = get_sport_emoji(str(sport_type), str(league_title), match_name)
 
-    # 5. Link stream kèm Header Referer chuẩn TiviMate
-    base_stream = f"https://ftlh5sc02iliv.vcdn.cloud/{room_id}_hd/{room_id}_hd@720p.m3u8"
+    # Tạo đường dẫn Stream chuẩn kèm Header bypass CDN
+    if is_live:
+      status_icon = "🟢 "
+      base_stream = f"https://ftlh5sc02iliv.vcdn.cloud/{room_id}_hd/{room_id}_hd@720p.m3u8"
+    else:
+      status_icon = ""
+      base_stream = "https://freem3u.xyz/static/no-signal/low.m3u8"
+
+    # Gắn Header trực tiếp vào URL cho TiviMate / Smart TV
     final_stream = f"{base_stream}|User-Agent={UA}&Referer={REFERER}"
 
-    # Định dạng tiêu đề hiển thị chuẩn danh sách Giờ Vàng
-    status_icon = "🟢 " if is_live else ""
     title = f"{status_icon}{time_str} {emoji} {match_name}{blv_str} [hls]"
 
     playlist_dict[room_id] = {
@@ -259,11 +264,11 @@ def main():
         "url": final_stream,
     }
 
-  # Xuất file M3U
+  # Ghép dữ liệu thành file M3U chuẩn
   m3u_lines = ["#EXTM3U\n"]
   for item in playlist_dict.values():
-    m3u_lines.append(f'#EXTVLCOPT:http-user-agent={UA}')
-    m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER}')
+    m3u_lines.append(f"#EXTVLCOPT:http-user-agent={UA}")
+    m3u_lines.append(f"#EXTVLCOPT:http-referrer={REFERER}")
     m3u_lines.append(
         f'#EXTINF:-1 tvg-logo="{item["logo"]}" group-title="Giờ Vàng TV" ,'
         f" {item['title']}"
@@ -274,9 +279,7 @@ def main():
   with open("playlist.m3u", "w", encoding="utf-8") as f:
     f.write("\n".join(m3u_lines))
 
-  print(
-      f"Thành công! Đã cào {len(playlist_dict)} trận đấu chuẩn định dạng M3U."
-  )
+  print(f"Đã cập nhật {len(playlist_dict)} trận đấu vào file playlist.m3u")
 
 
 if __name__ == "__main__":
