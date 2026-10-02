@@ -1,0 +1,32 @@
+#EXTM3U
+
+# Updated at 2026-10-02 10:56:02
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ62Ss5AllP6wiixu-3AAcjXD2dEGon_UoOwRMwkaPF7A&s=10" group-title="Giờ Vàng TV" , 🟢 10:00 02/10 🎮 Đài Bắc Trung Hoa vs Hàn Quốc (vit) [SV1] [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790910000_hd/1790910000_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ62Ss5AllP6wiixu-3AAcjXD2dEGon_UoOwRMwkaPF7A&s=10" group-title="Giờ Vàng TV" , 🟢 10:00 02/10 🎮 Đài Bắc Trung Hoa vs Hàn Quốc (vit) [SV2] [hls]
+https://live.giovang.co/live/1790910000/playlist.m3u8
+
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/Q1mGr3HG-IkyuUDEE.png" group-title="Giờ Vàng TV" , 🟢 11:00 02/10 ⚽ Qatar vs Thái Lan (sun) [SV1] [hls]
+https://live.giovang.co/live/1790913600/playlist.m3u8
+
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/Q1mGr3HG-IkyuUDEE.png" group-title="Giờ Vàng TV" , 🟢 11:00 02/10 ⚽ Qatar vs Thái Lan (sun) [SV2] [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790913600_hd/1790913600_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/nicaragua.png" group-title="Giờ Vàng TV" , 🟢 09:00 02/10 ⚽ Nicaragua vs Costa Rica (hau) [SV1] [hls]
+https://live.giovang.co/live/1790906400/playlist.m3u8
+
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/nicaragua.png" group-title="Giờ Vàng TV" , 🟢 09:00 02/10 ⚽ Nicaragua vs Costa Rica (hau) [SV2] [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790906400_hd/1790906400_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcScASzyMboTqvaXcsCvqZO4pouOAu1HBj0MKVDdJhRvOY8MuXuWxc8j6CA&s=10" group-title="Giờ Vàng TV" , 🟢 09:00 02/10 🥎 tokyo Open vs 2026 (Mù) [SV1] [hls]
+https://live.giovang.co/live/1790906400/playlist.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcScASzyMboTqvaXcsCvqZO4pouOAu1HBj0MKVDdJhRvOY8MuXuWxc8j6CA&s=10" group-title="Giờ Vàng TV" , 🟢 09:00 02/10 🥎 tokyo Open vs 2026 (Mù) [SV2] [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790906400_hd/1790906400_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSS_IH32DVNx93gl9bC16jRCszOVgU2zy2ns7uv_Kp9fg&s=10" group-title="Giờ Vàng TV" , 🟢 07:15 02/10 🏈 Cleveland Browns vs Pittburgh Steelers (riko) [SV1] [hls]
+https://live.giovang.co/live/1790900100/playlist.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSS_IH32DVNx93gl9bC16jRCszOVgU2zy2ns7uv_Kp9fg&s=10" group-title="Giờ Vàng TV" , 🟢 07:15 02/10 🏈 Cleveland Browns vs Pittburgh Steelers (riko) [SV2] [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1790900100_hd/1790900100_hd@720p.m3u8
