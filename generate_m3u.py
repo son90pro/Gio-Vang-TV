@@ -65,44 +65,26 @@ def is_match_valid(match):
         return False
     return True
 
-def extract_real_stream_ids(match_dict):
-    """Trích xuất chính xác ID luồng live, loại bỏ Timestamp thời gian gian thi đấu"""
-    skip_keys = {"time", "timestamp", "match_time", "created_at", "updated_at", "start_time", "date", "id"}
-    candidate_ids = []
-
-    def walk_json(obj, key=""):
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                if k.lower() not in skip_keys:
-                    walk_json(v, k)
-        elif isinstance(obj, list):
-            for item in obj:
-                walk_json(item, key)
-        else:
-            val_str = str(obj).strip()
-            # Tìm chuỗi 9-10 chữ số
-            if re.match(r'^\d{9,10}$', val_str):
-                val_int = int(val_str)
-                # Loại bỏ Unix Timestamp (các số từ 1.7 tỷ trở lên kết thúc bằng 00 hoặc trùng mốc giờ)
-                if not (1700000000 <= val_int <= 1900000000 and (val_str.endswith("00") or val_str.endswith("000"))):
-                    candidate_ids.append(val_str)
-
-    walk_json(match_dict)
-    return list(set(candidate_ids))
-
-def generate_stream_urls_from_match(match_dict):
+def extract_stream_urls_direct(match_dict):
+    """Biroken dagiti direct m3u8 URLs wenno valid stream IDs manipud iti match object"""
     urls = []
-    base_ids = extract_real_stream_ids(match_dict)
-    
-    for base_id in base_ids:
-        if len(base_id) == 10:
-            urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{base_id}_hd/{base_id}_hd@720p.m3u8")
-            urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{base_id}_hd/{base_id}_hd@720p.m3u8")
-        else:
-            for suffix in ["", "1", "2", "3", "4"]:
-                full_id = f"{base_id}{suffix}"
-                urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{full_id}_hd/{full_id}_hd@720p.m3u8")
-                urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{full_id}_hd/{full_id}_hd@720p.m3u8")
+    match_str = json.dumps(match_dict)
+
+    # 1. Biroken no adda direct .m3u8 links iti JSON
+    m3u8_links = re.findall(r'https?://[^\s"]+\.m3u8', match_str)
+    if m3u8_links:
+        for link in m3u8_links:
+            if "no-signal" not in link:
+                urls.append(link)
+
+    # 2. No awan direct .m3u8 links, biroken dagiti 9-10 digit numbers
+    if not urls:
+        all_digits = re.findall(r'\b(\d{9,10})\b', match_str)
+        for d in set(all_digits):
+            # Isina dagiti unix timestamp nga agsardeng iti '00' wenno '000'
+            if not (d.endswith("00") or d.endswith("000")):
+                urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{d}_hd/{d}_hd@720p.m3u8")
+                urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{d}_hd/{d}_hd@720p.m3u8")
 
     return list(dict.fromkeys(urls))
 
@@ -137,7 +119,7 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
-        stream_urls = generate_stream_urls_from_match(match)
+        stream_urls = extract_stream_urls_direct(match)
 
         sport_type = str(match.get("type", "football")).lower()
         league_name = str(match.get("league", {}).get("name", "")).lower()
