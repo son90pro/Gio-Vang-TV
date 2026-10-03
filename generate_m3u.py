@@ -63,18 +63,43 @@ def is_match_valid(match):
     return True
 
 def extract_real_room_id(match):
-    """Bóc tách chính xác room_id dạng 10 chữ số (đầu 17)"""
-    for key in ["room_id", "bitrate_id", "stream_id", "room"]:
+    """Bóc tách chính xác room_id, loại bỏ trường Timestamp thời gian"""
+    # 1. Ưu tiên lấy trực tiếp các key chứa ID phòng thực sự
+    for key in ["room_id", "bitrate_id", "stream_id", "room", "channel_id"]:
         val = match.get(key)
         if val is not None:
             sval = str(val).strip()
             if sval.isdigit() and len(sval) >= 8:
                 return sval
 
-    match_str = json.dumps(match)
-    found_ids = re.findall(r'\b17\d{8}\b', match_str)
-    if found_ids:
-        return found_ids[0]
+    # 2. Loại bỏ các key liên quan đến mốc thời gian để tránh lấy nhầm Unix Timestamp
+    ignore_keys = {"timestamp", "time", "date", "created_at", "updated_at", "start_time", "end_time", "match_time"}
+
+    def find_ids_recursive(obj):
+        found = []
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                k_lower = str(k).lower()
+                if k_lower in ignore_keys or "time" in k_lower or "date" in k_lower or "stamp" in k_lower:
+                    continue
+                found.extend(find_ids_recursive(v))
+        elif isinstance(obj, list):
+            for item in obj:
+                found.extend(find_ids_recursive(item))
+        elif isinstance(obj, (int, str)):
+            sval = str(obj).strip()
+            # ID room thường có dạng 10 chữ số bắt đầu bằng 17
+            if sval.isdigit() and len(sval) >= 8 and sval.startswith("17"):
+                found.append(sval)
+        return found
+
+    candidate_ids = find_ids_recursive(match)
+    # Lọc bỏ các giá trị tròn giờ timestamp (thường kết thúc bằng 00 hoặc 0000)
+    valid_ids = [i for i in candidate_ids if not i.endswith("0000")]
+    if valid_ids:
+        return valid_ids[0]
+    elif candidate_ids:
+        return candidate_ids[0]
 
     return None
 
@@ -149,14 +174,10 @@ def generate_m3u():
         else:
             status_symbol = ""
 
-        # Chuẩn hóa tên trận đúng mẫu
         title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
 
-        # Dòng 1: Đuôi #EXTINF khớp 100% mẫu chuẩn SportTV
         m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}')
-        # Dòng 2: Link CDN sạch
         m3u_lines.append(stream_url)
-        # Thêm 1 dòng trống phân cách giữa các trận
         m3u_lines.append("")
 
         count_added += 1
@@ -164,7 +185,7 @@ def generate_m3u():
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Đã cập nhật thành công {count_added} trận vào giovang.m3u (Khớp mẫu 100%)")
+    print(f"Đã cập nhật thành công {count_added} trận vào giovang.m3u")
 
 if __name__ == "__main__":
     generate_m3u()
