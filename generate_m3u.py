@@ -65,22 +65,40 @@ def is_match_valid(match):
         return False
     return True
 
+def extract_real_stream_ids(match_dict):
+    """Trích xuất chính xác ID luồng live, loại bỏ Timestamp thời gian gian thi đấu"""
+    skip_keys = {"time", "timestamp", "match_time", "created_at", "updated_at", "start_time", "date", "id"}
+    candidate_ids = []
+
+    def walk_json(obj, key=""):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k.lower() not in skip_keys:
+                    walk_json(v, k)
+        elif isinstance(obj, list):
+            for item in obj:
+                walk_json(item, key)
+        else:
+            val_str = str(obj).strip()
+            # Tìm chuỗi 9-10 chữ số
+            if re.match(r'^\d{9,10}$', val_str):
+                val_int = int(val_str)
+                # Loại bỏ Unix Timestamp (các số từ 1.7 tỷ trở lên kết thúc bằng 00 hoặc trùng mốc giờ)
+                if not (1700000000 <= val_int <= 1900000000 and (val_str.endswith("00") or val_str.endswith("000"))):
+                    candidate_ids.append(val_str)
+
+    walk_json(match_dict)
+    return list(set(candidate_ids))
+
 def generate_stream_urls_from_match(match_dict):
-    """Tạo chính xác các luồng CDN theo cấu trúc ID vcdn.cloud"""
     urls = []
-    
-    # Quét tất cả chuỗi số dạng ID trận (9-10 chữ số)
-    match_str = json.dumps(match_dict)
-    found_ids = re.findall(r'\b(17\d{7,8})\b', match_str)
-    
-    base_ids = list(set(found_ids))
+    base_ids = extract_real_stream_ids(match_dict)
     
     for base_id in base_ids:
-        # Nếu ID đã có 10 chữ số (đã chứa sẵn hậu tố BLV)
         if len(base_id) == 10:
             urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{base_id}_hd/{base_id}_hd@720p.m3u8")
+            urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{base_id}_hd/{base_id}_hd@720p.m3u8")
         else:
-            # Tự động sinh ra các luồng ID kèm hậu tố (gốc, 1, 2, 3, 4)
             for suffix in ["", "1", "2", "3", "4"]:
                 full_id = f"{base_id}{suffix}"
                 urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{full_id}_hd/{full_id}_hd@720p.m3u8")
@@ -178,7 +196,6 @@ def generate_m3u():
             m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
             m3u_lines.append(f'#EXTVLCOPT:http-origin={ORIGIN_URL}')
             
-            # Gắn nối pipe Header trực tiếp vào URL
             final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}&Origin={ORIGIN_URL}"
             m3u_lines.append(final_url)
             m3u_lines.append("")
