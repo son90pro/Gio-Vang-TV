@@ -12,6 +12,12 @@ except ImportError:
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 DEFAULT_OFFLINE_STREAM = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
+# Danh sách các CDN Server của Giờ Vàng
+CDN_SERVERS = [
+    "https://ftlh5sc02iliv.vcdn.cloud",
+    "https://pzhgifbkllliv.vcdn.cloud"
+]
+
 SPORT_ICONS = {
     "football": "⚽", "bongda": "⚽",
     "basketball": "🏀", "bongro": "🏀",
@@ -65,56 +71,28 @@ def is_match_valid(match):
         return False
     return True
 
-def find_urls_and_ids(data):
-    """Quét đệ quy tìm tất cả link .m3u8 và ID phòng live bất kỳ"""
+def extract_stream_urls(match):
+    """Trích xuất danh sách link stream từ cả 2 CDN Server"""
     urls = []
-    ids = []
+    match_str = json.dumps(match)
 
-    if isinstance(data, dict):
-        for k in ["room_id", "stream_id", "bitrate_id", "id", "code"]:
-            val = data.get(k)
-            if val is not None:
-                sval = str(val).strip()
-                if sval.isdigit() and 5 <= len(sval) <= 11:
-                    # Bỏ qua mốc thời gian Unix timestamp kết thúc bằng 00 hoặc 000
-                    if not (len(sval) == 10 and (sval.endswith("00") or sval.endswith("000"))):
-                        ids.append(sval)
+    # 1. Tìm ID phòng live
+    found_ids = re.findall(r'\b(17\d{7,8})\b', match_str)
+    
+    if found_ids:
+        for sid in set(found_ids):
+            if not (sid.endswith("00") or sid.endswith("000")):
+                for cdn in CDN_SERVERS:
+                    urls.append(f"{cdn}/{sid}_hd/{sid}_hd@720p.m3u8")
 
-        for v in data.values():
-            u, i = find_urls_and_ids(v)
-            urls.extend(u)
-            ids.extend(i)
+    # 2. Nếu không tìm thấy ID, quét trực tiếp m3u8 có trong JSON
+    if not urls:
+        m3u8_matches = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
+        for link in m3u8_matches:
+            if "no-signal" not in link:
+                urls.append(link)
 
-    elif isinstance(data, list):
-        for item in data:
-            u, i = find_urls_and_ids(item)
-            urls.extend(u)
-            ids.extend(i)
-
-    elif isinstance(data, str):
-        if ".m3u8" in data:
-            found = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', data)
-            urls.extend(found)
-        found_nums = re.findall(r'\b\d{6,10}\b', data)
-        for n in found_nums:
-            if not (len(n) == 10 and (n.endswith("00") or n.endswith("000"))):
-                ids.append(n)
-
-    return list(dict.fromkeys(urls)), list(dict.fromkeys(ids))
-
-def extract_real_stream_url(match):
-    urls, ids = find_urls_and_ids(match)
-
-    # 1. Ưu tiên lấy trực tiếp link .m3u8 từ API nếu có
-    for u in urls:
-        if "no-signal" not in u and "http" in u:
-            return u
-
-    # 2. Ghép ID phòng live bất kỳ tìm được vào CDN VCDN
-    for sid in ids:
-        return f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8"
-
-    return DEFAULT_OFFLINE_STREAM
+    return list(dict.fromkeys(urls))
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -147,7 +125,9 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
-        stream_url = extract_real_stream_url(match)
+        stream_urls = extract_stream_urls(match)
+        if not stream_urls:
+            stream_urls = [DEFAULT_OFFLINE_STREAM]
 
         sport_type = str(match.get("type", "football")).lower()
         league_name = str(match.get("league", {}).get("name", "")).lower()
@@ -189,19 +169,23 @@ def generate_m3u():
         else:
             status_symbol = ""
 
-        title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
+        base_title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
 
-        m3u_lines.append(
-            f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
-            f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}" , {title}'
-        )
-        m3u_lines.append(f'#EXTHTTP:{ext_http_json}')
-        m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
-        m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
-        
-        final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}"
-        m3u_lines.append(final_url)
-        m3u_lines.append("")
+        for idx, stream_url in enumerate(stream_urls):
+            server_label = f" - Sv{idx + 1}" if len(stream_urls) > 1 else ""
+            title = f"{base_title}{server_label}"
+
+            m3u_lines.append(
+                f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
+                f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}" , {title}'
+            )
+            m3u_lines.append(f'#EXTHTTP:{ext_http_json}')
+            m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
+            m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
+            
+            final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}"
+            m3u_lines.append(final_url)
+            m3u_lines.append("")
         
         count_added += 1
 
