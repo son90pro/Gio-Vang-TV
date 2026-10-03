@@ -22,10 +22,14 @@ SPORT_ICONS = {
     "f1": "[formula1]", "formula1": "[formula1]", "racing": "[formula1]"
 }
 
+# Referer chính xác theo domain hiển thị trên luồng phát video
+REFERER_URL = "https://giovang.co/"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "User-Agent": USER_AGENT,
     "Accept": "application/json, text/plain, */*",
-    "Referer": "https://giovang.rent/",
+    "Referer": REFERER_URL,
 }
 
 def create_http_session():
@@ -37,6 +41,32 @@ def create_http_session():
     session.headers.update(HEADERS)
     return session
 
+def clean_blv_name(blv_raw):
+    """Xử lý định dạng tên BLV gọn đẹp tiếng Việt có dấu"""
+    if isinstance(blv_raw, list) and blv_raw:
+        name = str(blv_raw[0])
+    else:
+        name = str(blv_raw or "BLV")
+
+    # Xóa tiền tố blv- hoặc blv_
+    name = re.sub(r'^(blv[-_]?|BLV[-_]?)', '', name, flags=re.IGNORECASE).strip()
+    
+    # Bảng quy đổi slug BLV sang tên tiếng Việt
+    blv_map = {
+        "diec": "Điếc",
+        "vit": "Vịt",
+        "bon": "Bốn",
+        "tri": "Trí",
+        "tom": "Tôm",
+        "cay": "Cây",
+        "sun": "Sun",
+        "ben": "Bên",
+        "ngu": "Ngơ",
+        "tuimu": "Túi Mù"
+    }
+    
+    return blv_map.get(name.lower(), name.capitalize())
+
 def is_match_valid(match):
     status_code = str(match.get("status_code", "")).upper()
     status_text = str(match.get("status", "")).lower()
@@ -47,15 +77,16 @@ def is_match_valid(match):
     return True
 
 def extract_stream_urls(match_dict):
+    """Trích xuất link m3u8 thực tế"""
     match_str = json.dumps(match_dict)
     
-    # 1. Quét tìm trực tiếp URL vcdn.cloud trong JSON
-    vcdn_urls = re.findall(r'https?://[^\s"\'\\]*vcdn\.cloud[^\s"\'\\]*\.m3u8', match_str)
-    if vcdn_urls:
-        clean_urls = [u.replace("\\/", "/") for u in vcdn_urls]
-        return list(set(clean_urls))
+    # 1. Ưu tiên quét URL m3u8 trực tiếp từ JSON
+    found_urls = re.findall(r'https?://[^\s"\'\\]+\.m3u8[^\s"\'\\]*', match_str)
+    if found_urls:
+        clean_urls = list(set([u.replace("\\/", "/") for u in found_urls]))
+        return clean_urls
 
-    # 2. Quét Stream ID 10 chữ số (17xxxxxxxx)
+    # 2. Nếu không có URL trực tiếp, tìm ID 10 chữ số
     ids = re.findall(r'\b(17\d{8,9})\b', match_str)
     if not ids:
         possible_keys = ["stream_id", "id_stream", "room_id", "channel_id", "fi", "stream_key"]
@@ -122,8 +153,9 @@ def generate_m3u():
             or ""
         )
 
+        # Định dạng BLV chuẩn tiếng Việt
         blv_raw = match.get("blv", [])
-        blv_name = blv_raw[0] if isinstance(blv_raw, list) and blv_raw else str(blv_raw or "BLV")
+        blv_formatted = clean_blv_name(blv_raw)
 
         is_live = match.get("is_live", False)
         status_code = str(match.get("status_code", "")).upper()
@@ -138,15 +170,15 @@ def generate_m3u():
         if not stream_urls:
             stream_urls = [DEFAULT_OFFLINE_STREAM]
 
-        title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_name}) [hls]"
+        # Định dạng chuẩn: (Điếc) thay vì (blv-diec)
+        title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
 
         for idx, stream_url in enumerate(stream_urls):
             display_title = title if len(stream_urls) == 1 else title.replace(" [hls]", f" - Luồng {idx + 1} [hls]")
             
-            # Ghi chuẩn cấu trúc 4 dòng theo mẫu
             m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {display_title}')
-            m3u_lines.append('#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
-            m3u_lines.append('#EXTVLCOPT:http-referrer=https://giovang.rent/')
+            m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
+            m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
             m3u_lines.append(stream_url)
             m3u_lines.append("")
         
