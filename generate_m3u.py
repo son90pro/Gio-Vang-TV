@@ -62,47 +62,52 @@ def is_match_valid(match):
         return False
     return True
 
-def extract_stream_url(match):
-    # 1. Thu thập tất cả các giá trị mang ý nghĩa mốc giờ trận đấu để đưa vào danh sách đen (Blacklist)
-    time_blacklist = set()
-    for k, v in match.items():
-        k_lower = str(k).lower()
-        if any(ts_key in k_lower for ts_key in ["time", "date", "stamp", "created", "updated"]):
-            if isinstance(v, (int, str)):
-                time_blacklist.add(str(v).strip())
+def extract_real_room_id(match):
+    # 1. Lấy mốc timestamp giờ trận đấu để lọc prefix (ví dụ 17910)
+    ts = match.get("timestamp") or match.get("time_stamp") or match.get("start_time") or int(time.time())
+    ts_str = str(ts).strip()
+    prefix = ts_str[:5] if len(ts_str) >= 5 else "17910"
 
-    # Nếu ID trận đấu trùng với mốc giờ timestamp (như 1791043200), chặn luôn ID này
-    match_id = str(match.get("id", "")).strip()
-    if match_id in time_blacklist or (match_id.isdigit() and match_id.endswith("00")):
-        time_blacklist.add(match_id)
-
-    # 2. Quét xem API có trả về sẵn link .m3u8 trực tiếp không
-    match_str = json.dumps(match)
-    direct_urls = re.findall(r'https?://[^\s"]+\.m3u8', match_str)
-    if direct_urls:
-        return direct_urls[0]
-
-    # 3. Lọc lấy ID phòng thực sự qua các trường chuyên biệt
-    potential_keys = ["bitrate_id", "room_id", "stream_id", "room", "channel_id", "bitrate", "hls"]
-    for key in potential_keys:
+    # 2. Tìm ID từ các key chuyên biệt (loại trừ trùng khớp với timestamp giờ)
+    for key in ["room_id", "bitrate_id", "stream_id", "channel_id", "room", "bitrate"]:
         val = match.get(key)
         if val is not None:
             sval = str(val).strip()
-            if sval and sval not in time_blacklist:
-                if sval.isdigit():
-                    if len(sval) == 10 and sval.startswith("17"):
-                        return f"{PRIMARY_CDN}/{sval}_hd/{sval}_hd@720p.m3u8"
-                    elif len(sval) == 5:
-                        prefix = str(match.get("timestamp", "17910"))[:5]
-                        full_room = f"{prefix}{sval}"
-                        return f"{PRIMARY_CDN}/{full_room}_hd/{full_room}_hd@720p.m3u8"
+            if sval and sval != ts_str:
+                if len(sval) == 10 and sval.startswith("17") and not sval.endswith("00"):
+                    return sval
+                elif len(sval) in [4, 5, 6] and sval.isdigit():
+                    return f"{prefix}{sval}"
 
-    # 4. Tìm tự động chuỗi 10 chữ số hợp lệ không nằm trong danh sách đen mốc giờ
-    all_10dig = re.findall(r'\b17\d{8}\b', match_str)
-    for cand in all_10dig:
-        if cand not in time_blacklist:
-            return f"{PRIMARY_CDN}/{cand}_hd/{cand}_hd@720p.m3u8"
+    # 3. Lấy từ key "id" chính của trận đấu (ví dụ 11626, 11695)
+    match_id = match.get("id")
+    if match_id is not None:
+        sval = str(match_id).strip()
+        if sval and sval != ts_str:
+            if len(sval) == 10 and sval.startswith("17") and not sval.endswith("00"):
+                return sval
+            elif len(sval) in [4, 5, 6] and sval.isdigit():
+                return f"{prefix}{sval}"
 
+    # 4. Quét regex tìm chuỗi ID 4-6 số trong JSON khác với timestamp
+    match_str = json.dumps(match)
+    short_ids = re.findall(r'\b\d{4,6}\b', match_str)
+    for sid in short_ids:
+        if sid != ts_str:
+            return f"{prefix}{sid}"
+
+    # 5. Dự phòng chuỗi 10 số khác mốc giờ
+    long_ids = re.findall(r'\b17\d{8}\b', match_str)
+    for lid in long_ids:
+        if lid != ts_str and not lid.endswith("00"):
+            return lid
+
+    return None
+
+def extract_stream_url(match):
+    room_id = extract_real_room_id(match)
+    if room_id:
+        return f"{PRIMARY_CDN}/{room_id}_hd/{room_id}_hd@720p.m3u8"
     return DEFAULT_OFFLINE_STREAM
 
 def fetch_matches():
@@ -122,12 +127,6 @@ def fetch_matches():
 def generate_m3u():
     matches = fetch_matches()
     m3u_lines = ["#EXTM3U"]
-    
-    # Dòng comment xem cấu trúc API mẫu trên GitHub
-    if matches:
-        debug_sample = json.dumps(matches[0], ensure_ascii=False)
-        m3u_lines.append(f"# DEBUG_API_SAMPLE: {debug_sample[:300]}...")
-
     count_added = 0
 
     for match in matches:
