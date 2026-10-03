@@ -63,38 +63,52 @@ def is_match_valid(match):
     return True
 
 def extract_real_room_id(match):
-    """Bóc tách chính xác room_id, phân biệt triệt để với Unix Timestamp"""
-    match_str = json.dumps(match)
-
-    # 1. Nếu trong JSON API có sẵn URL .m3u8, bóc trực tiếp room_id từ URL
-    m3u8_urls = re.findall(r'https?://[^\s"]+\.m3u8', match_str)
-    for url in m3u8_urls:
-        room_match = re.findall(r'/(\d{8,10})_hd/', url)
-        if room_match:
-            return room_match[0]
-
-    # 2. Tìm tất cả chuỗi số 8-10 chữ số bắt đầu bằng 17
-    all_ids = re.findall(r'\b17\d{6,8}\b', match_str)
+    """
+    Thuật toán chuẩn Giờ Vàng:
+    Lấy prefix thời gian (5 số đầu) + ID trận đấu (5 số cuối) -> room_id 10 chữ số
+    """
+    # 1. Lấy mốc timestamp làm prefix (ví dụ 17910)
+    ts = match.get("timestamp") or match.get("start_time") or match.get("time_stamp")
+    if not ts or not str(ts).isdigit():
+        ts = int(time.time())
     
-    valid_room_ids = []
-    for sid in all_ids:
-        try:
-            val = int(sid)
-            # Timestamp mốc giờ trận đấu (như 1791043200) luôn chia hết cho 60
-            # Room ID thực tế (như 1791011626) KHÔNG chia hết cho 60
-            if val % 60 != 0:
-                valid_room_ids.append(sid)
-        except ValueError:
-            continue
+    ts_str = str(ts).strip()
+    prefix = ts_str[:5] if len(ts_str) >= 5 else "17910"
 
-    if valid_room_ids:
-        return valid_room_ids[0]
+    # 2. Tìm ID ngắn của trận đấu từ các field trong API
+    raw_id = None
+    for key in ["bitrate_id", "room_id", "stream_id", "room", "channel_id", "id"]:
+        val = match.get(key)
+        if val is not None:
+            sval = str(val).strip()
+            # Bỏ qua nếu giá trị trùng khớp hoàn toàn với timestamp mốc giờ
+            if sval == ts_str:
+                continue
+            if sval.isdigit():
+                raw_id = sval
+                break
 
-    # Nếu không lọc được theo % 60, ưu tiên lấy số xuất hiện sau cùng trong match object
-    if all_ids:
-        return all_ids[-1]
+    # Nếu chưa lấy được, duyệt qua dict để tìm ID khác timestamp
+    if not raw_id:
+        ignore_keys = {"timestamp", "time", "date", "created_at", "updated_at", "start_time", "end_time", "match_time"}
+        for k, v in match.items():
+            if str(k).lower() not in ignore_keys and isinstance(v, (int, str)):
+                sval = str(v).strip()
+                if sval.isdigit() and sval != ts_str:
+                    raw_id = sval
+                    break
 
-    return None
+    if not raw_id:
+        return None
+
+    # 3. Tạo room_id chuẩn 10 chữ số
+    if len(raw_id) == 10 and raw_id.startswith("17"):
+        return raw_id
+    elif len(raw_id) < 10:
+        # Ghép prefix 17910 + id 5 số (ví dụ 11626 -> 1791011626)
+        return f"{prefix}{raw_id.zfill(5)}"
+    
+    return raw_id
 
 def extract_stream_url(match):
     room_id = extract_real_room_id(match)
