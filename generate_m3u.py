@@ -20,8 +20,7 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Origin": "https://giovang.co",
-    "Referer": "https://giovang.co/",
+    "Referer": "https://giovang.rent/",
 }
 
 def is_match_valid(match):
@@ -52,40 +51,69 @@ def fetch_matches():
         print(f"[ERR] Không thể kết nối tới API: {e}")
     return []
 
-def get_real_stream_urls(match):
-    match_id = match.get("fi") or match.get("id", "")
-    if not match_id:
-        return []
+def scrape_all_streams():
+    """
+    Tải trang chủ giovang.rent / giovang.co để lấy danh sách URL slug của từng trận,
+    sau đó truy cập từng trang để bóc tách link .m3u8 từ DPlayer.
+    """
+    stream_map = {}
+    match_page_urls = set()
 
-    urls = []
-    # Danh sách các trang xem trực tiếp chứa mã nhúng luồng m3u8
-    candidate_pages = [
-        f"https://giovang.co/truc-tiep/{match_id}",
-        f"https://giovang.rent/truc-tiep/{match_id}",
-        f"https://giovang.co/truc-tiep-match/{match_id}",
-    ]
-
-    for page_url in candidate_pages:
+    # 1. Quét trang chủ lấy tất cả các link xem trực tiếp
+    domains = ["https://giovang.rent/", "https://giovang.co/"]
+    for domain in domains:
         try:
-            res = requests.get(page_url, headers=HEADERS, timeout=6)
+            res = requests.get(domain, headers=HEADERS, timeout=10)
             if res.status_code == 200:
-                # Tìm tất cả link .m3u8 trong HTML trang
-                found_urls = re.findall(r'https?://[^\s"\'\\]+\.m3u8[^\s"\'\\]*', res.text)
-                for u in found_urls:
-                    clean_url = u.replace("\\/", "/")
-                    if "no-signal" not in clean_url and "freem3u" not in clean_url:
-                        urls.append(clean_url)
+                found_links = re.findall(r'href=["\'](https?://[^\s"\'\\]+truc-tiep-[^"\']+)["\']', res.text)
+                for link in found_links:
+                    match_page_urls.add(link)
                 
-                if urls:
-                    print(f"[DEBUG] Bóc tách thành công {len(urls)} link m3u8 từ {page_url}")
+                rel_links = re.findall(r'href=["\'](/truc-tiep-[^"\']+)["\']', res.text)
+                for rlink in rel_links:
+                    match_page_urls.add(domain.rstrip('/') + rlink)
+
+                if match_page_urls:
+                    print(f"[DEBUG] Đã tìm thấy {len(match_page_urls)} trang trận đấu từ {domain}")
                     break
         except Exception as e:
-            print(f"[DEBUG] Lỗi cào stream ({page_url}): {e}")
+            print(f"[DEBUG] Lỗi tải trang chủ {domain}: {e}")
 
-    return list(set(urls))
+    # 2. Bóc tách link m3u8 từ từng trang trận đấu
+    for page_url in match_page_urls:
+        try:
+            res = requests.get(page_url, headers=HEADERS, timeout=8)
+            if res.status_code == 200:
+                html_content = res.text
+                
+                # Tìm tất cả file .m3u8 trong HTML
+                m3u8_links = re.findall(r'https?://[^\s"\'\\]+\.m3u8[^\s"\'\\]*', html_content)
+                valid_m3u8s = []
+                for u in m3u8_links:
+                    clean_u = u.replace("\\/", "/")
+                    if "no-signal" not in clean_u and "freem3u" not in clean_u:
+                        valid_m3u8s.append(clean_u)
+                valid_m3u8s = list(set(valid_m3u8s))
+
+                if valid_m3u8s:
+                    print(f"[DEBUG] Lấy thành công {len(valid_m3u8s)} link m3u8 từ: {page_url}")
+                    stream_map[page_url] = valid_m3u8s
+                    
+                    # Quét thêm ID trận nếu có trong JS của trang
+                    ids_in_html = re.findall(r'["\'](?:id|fi)["\']\s*:\s*["\']([a-zA-Z0-9]+)["\']', html_content)
+                    for mid in ids_in_html:
+                        stream_map[mid] = valid_m3u8s
+        except Exception as e:
+            print(f"[DEBUG] Lỗi cào trang {page_url}: {e}")
+
+    return stream_map, list(match_page_urls)
 
 def generate_m3u():
     matches = fetch_matches()
+    
+    print("[INFO] Đang quét các trang trận đấu để lấy luồng m3u8...")
+    stream_map, all_page_urls = scrape_all_streams()
+
     m3u_lines = ["#EXTM3U\n"]
     count_added = 0
 
@@ -93,6 +121,7 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
+        match_id = match.get("fi") or match.get("id", "")
         sport_type = str(match.get("type", "football")).lower()
         icon = SPORT_ICONS.get(sport_type, "⚽")
 
@@ -120,8 +149,26 @@ def generate_m3u():
         status_code = str(match.get("status_code", "")).upper()
         status_symbol = "🟢 " if (is_live or status_code == "LIVE") else "🟡 "
 
-        # Gọi hàm lấy link m3u8 thật từ trang web
-        stream_urls = get_real_stream_urls(match)
+        # Khớp luồng stream
+        stream_urls = []
+        
+        # Thử tìm theo match_id
+        if match_id in stream_map:
+            stream_urls = stream_map[match_id]
+        
+        # Thử tìm theo tên đội bóng trong URL
+        if not stream_urls:
+            home_slug = home_name.lower().replace(" ", "-") if home_name else ""
+            away_slug = away_name.lower().replace(" ", "-") if away_name else ""
+            
+            for purl in all_page_urls:
+                purl_lower = purl.lower()
+                if (home_slug and home_slug in purl_lower) or (away_slug and away_slug in purl_lower):
+                    if purl in stream_map:
+                        stream_urls = stream_map[purl]
+                        break
+
+        # Nếu chưa tới giờ phát sóng hoặc không cào được thì dùng fallback
         if not stream_urls:
             stream_urls = [DEFAULT_OFFLINE_STREAM]
 
@@ -132,12 +179,12 @@ def generate_m3u():
             
             m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV", {display_title}')
             m3u_lines.append("#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-            m3u_lines.append("#EXTVLCOPT:http-referrer=https://giovang.co/")
+            m3u_lines.append("#EXTVLCOPT:http-referrer=https://giovang.rent/")
             
             if "freem3u.xyz" in stream_url:
                 m3u_lines.append(stream_url)
             else:
-                m3u_lines.append(f"{stream_url}|Referer=https://giovang.co/&User-Agent=Mozilla/5.0")
+                m3u_lines.append(f"{stream_url}|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0")
             m3u_lines.append("")
         
         count_added += 1
@@ -149,3 +196,4 @@ def generate_m3u():
 
 if __name__ == "__main__":
     generate_m3u()
+    
