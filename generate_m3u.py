@@ -22,8 +22,9 @@ SPORT_ICONS = {
     "f1": "[formula1]", "formula1": "[formula1]", "racing": "[formula1]"
 }
 
-REFERER_URL = "https://giovang.co/"
-ORIGIN_URL = "https://giovang.co"
+# Cập nhật Domain Referer chính xác theo trang web hiện tại
+REFERER_URL = "https://giovang.rent/"
+ORIGIN_URL = "https://giovang.rent"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
 HEADERS = {
@@ -75,7 +76,7 @@ def is_match_valid(match):
     return True
 
 def extract_stream_urls(match_dict):
-    """Quét đệ quy lấy chính xác mọi URL .m3u8 thực tế trong API"""
+    """Bóc tách hoặc khởi tạo URL stream đúng định dạng CDN vcdn.cloud"""
     urls = []
 
     def recursive_search_m3u8(obj):
@@ -96,16 +97,16 @@ def extract_stream_urls(match_dict):
     if urls:
         return list(set(urls))
 
-    # Dự phòng: Nếu API chỉ trả ID, tạo đa dạng các cụm CDN
+    # Tự tạo luồng từ Stream ID chuẩn xác tìm được từ DevTools
     match_str = json.dumps(match_dict)
     ids = re.findall(r'\b(17\d{8,9})\b', match_str)
     if ids:
         unique_ids = list(set(ids))
         fallback_urls = []
         for sid in unique_ids:
-            fallback_urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
+            # Tạo cụm máy chủ CDN chính và dự phòng
             fallback_urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
-            fallback_urls.append(f"https://hls.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
+            fallback_urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
         return fallback_urls
 
     return []
@@ -183,7 +184,7 @@ def generate_m3u():
         for idx, stream_url in enumerate(stream_urls):
             display_title = title if len(stream_urls) == 1 else title.replace(" [hls]", f" - Luồng {idx + 1} [hls]")
             
-            # Cấu trúc ghi kết hợp tương thích đa nền tảng
+            # Khai báo Header đa phương thức cho TiviMate / IPTV / VLC
             m3u_lines.append(
                 f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
                 f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}" , {display_title}'
@@ -192,7 +193,7 @@ def generate_m3u():
             m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
             m3u_lines.append(f'#EXTVLCOPT:http-origin={ORIGIN_URL}')
             
-            # Nối tham số pipe vào đuôi URL cho trình phát hỗ trợ đọc trực tiếp
+            # Gắn nối pipe Header trực tiếp vào đuôi URL
             if "vcdn.cloud" in stream_url and "|" not in stream_url:
                 final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}&Origin={ORIGIN_URL}"
             else:
@@ -210,3 +211,4 @@ def generate_m3u():
 
 if __name__ == "__main__":
     generate_m3u()
+    
