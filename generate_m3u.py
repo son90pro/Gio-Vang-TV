@@ -79,22 +79,30 @@ def is_match_valid(match):
     return True
 
 def build_vcdn_url(match):
-    # Lấy ID trận đấu (ví dụ: 11626, 34312, 67663)
-    match_id = str(match.get("id", "")).strip()
-    if not match_id or not match_id.isdigit():
+    raw_id = match.get("id") or match.get("_id") or match.get("room_id")
+    
+    if not raw_id or isinstance(raw_id, (list, dict)):
+        match_str = json.dumps(match)
+        m = re.search(r'"id"\s*:\s*(\d+)', match_str)
+        raw_id = m.group(1) if m else None
+
+    if not raw_id:
         return DEFAULT_OFFLINE_STREAM
 
-    # Lấy 5 số đầu của Timestamp
-    ts = match.get("timestamp") or match.get("time_stamp") or match.get("start_time") or int(time.time())
-    ts_str = str(ts).strip()
-    prefix = ts_str[:5] if len(ts_str) >= 5 else "17910"
+    s_id = str(raw_id).strip()
+    digits = re.sub(r'\D', '', s_id)
+    if not digits:
+        return DEFAULT_OFFLINE_STREAM
 
-    # Format ID trận đủ 5 chữ số
-    formatted_id = match_id.zfill(5)
+    if len(digits) == 10 and digits.startswith("17"):
+        return f"{PRIMARY_CDN}/{digits}_hd/{digits}_hd@720p.m3u8"
 
-    # Ghép chuẩn công thức VCDN
-    stream_id = f"{prefix}{formatted_id}"
-    return f"{PRIMARY_CDN}/{stream_id}_hd/{stream_id}_hd@720p.m3u8"
+    ts = str(match.get("timestamp") or match.get("time_stamp") or match.get("start_time") or int(time.time())).strip()
+    ts_digits = re.sub(r'\D', '', ts)
+    prefix = ts_digits[:5] if len(ts_digits) >= 5 else "17910"
+    
+    full_id = f"{prefix}{digits.zfill(5)}"
+    return f"{PRIMARY_CDN}/{full_id}_hd/{full_id}_hd@720p.m3u8"
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -119,7 +127,6 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
-        # Luôn tạo đường dẫn VCDN chuẩn cho từng trận
         stream_url = build_vcdn_url(match)
 
         sport_type = str(match.get("type", "football")).lower()
