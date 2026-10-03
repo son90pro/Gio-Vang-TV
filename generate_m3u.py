@@ -23,12 +23,14 @@ SPORT_ICONS = {
 }
 
 REFERER_URL = "https://giovang.co/"
+ORIGIN_URL = "https://giovang.co"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
 HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept": "application/json, text/plain, */*",
     "Referer": REFERER_URL,
+    "Origin": ORIGIN_URL
 }
 
 def create_http_session():
@@ -41,7 +43,7 @@ def create_http_session():
     return session
 
 def clean_blv_name(blv_raw):
-    """Định dạng tên BLV sang tiếng Việt có dấu"""
+    """Định dạng tên BLV sang tiếng Việt có dấu chuẩn"""
     if isinstance(blv_raw, list) and blv_raw:
         name = str(blv_raw[0])
     else:
@@ -73,33 +75,40 @@ def is_match_valid(match):
     return True
 
 def extract_stream_urls(match_dict):
-    """Trích xuất linh hoạt nhiều cụm máy chủ CDN tránh chết link"""
-    match_str = json.dumps(match_dict)
-    
-    # 1. Tìm trực tiếp URL m3u8 có trong dữ liệu JSON
-    found_urls = re.findall(r'https?://[^\s"\'\\]+\.m3u8[^\s"\'\\]*', match_str)
-    if found_urls:
-        clean_urls = list(set([u.replace("\\/", "/") for u in found_urls]))
-        return clean_urls
-
-    # 2. Tìm Stream ID và tạo luồng trên các cụm CDN dự phòng
-    ids = re.findall(r'\b(17\d{8,9})\b', match_str)
-    if not ids:
-        possible_keys = ["stream_id", "id_stream", "room_id", "channel_id", "fi", "stream_key"]
-        for key in possible_keys:
-            val = str(match_dict.get(key, ""))
-            if re.match(r'^\d{8,11}$', val):
-                ids.append(val)
-
+    """Quét đệ quy lấy chính xác mọi URL .m3u8 thực tế trong API"""
     urls = []
+
+    def recursive_search_m3u8(obj):
+        if isinstance(obj, str):
+            if ".m3u8" in obj:
+                clean_url = obj.replace("\\/", "/")
+                if clean_url.startswith("http"):
+                    urls.append(clean_url)
+        elif isinstance(obj, dict):
+            for val in obj.values():
+                recursive_search_m3u8(val)
+        elif isinstance(obj, list):
+            for item in obj:
+                recursive_search_m3u8(item)
+
+    recursive_search_m3u8(match_dict)
+
+    if urls:
+        return list(set(urls))
+
+    # Dự phòng: Nếu API chỉ trả ID, tạo đa dạng các cụm CDN
+    match_str = json.dumps(match_dict)
+    ids = re.findall(r'\b(17\d{8,9})\b', match_str)
     if ids:
         unique_ids = list(set(ids))
-        # Tạo ưu tiên cụm CDN chính và cụm dự phòng
+        fallback_urls = []
         for sid in unique_ids:
-            urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
-            urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
-    
-    return urls
+            fallback_urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
+            fallback_urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
+            fallback_urls.append(f"https://hls.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
+        return fallback_urls
+
+    return []
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -172,19 +181,24 @@ def generate_m3u():
         title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
 
         for idx, stream_url in enumerate(stream_urls):
-            display_title = title if len(stream_urls) == 1 else title.replace(" [hls]", f" - Server {idx + 1} [hls]")
+            display_title = title if len(stream_urls) == 1 else title.replace(" [hls]", f" - Luồng {idx + 1} [hls]")
             
-            # Ghi Header dạng Attributes trực tiếp trong #EXTINF
-            extinf_line = (
+            # Cấu trúc ghi kết hợp tương thích đa nền tảng
+            m3u_lines.append(
                 f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
                 f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}" , {display_title}'
             )
-            
-            m3u_lines.append(extinf_line)
             m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
             m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
-            m3u_lines.append(f'#EXTHTTP:{{"User-Agent":"{USER_AGENT}","Referer":"{REFERER_URL}"}}')
-            m3u_lines.append(stream_url)
+            m3u_lines.append(f'#EXTVLCOPT:http-origin={ORIGIN_URL}')
+            
+            # Nối tham số pipe vào đuôi URL cho trình phát hỗ trợ đọc trực tiếp
+            if "vcdn.cloud" in stream_url and "|" not in stream_url:
+                final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}&Origin={ORIGIN_URL}"
+            else:
+                final_url = stream_url
+
+            m3u_lines.append(final_url)
             m3u_lines.append("")
         
         count_added += 1
@@ -192,8 +206,7 @@ def generate_m3u():
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Thành công: Đã xuất {count_added} trận đấu.")
+    print(f"Cập nhật thành công {count_added} trận vào giovang.m3u")
 
 if __name__ == "__main__":
     generate_m3u()
-    
