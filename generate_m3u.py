@@ -3,7 +3,6 @@ import time
 import requests
 
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
-DETAIL_API_URL = "https://live-api.keonhacaitp.one/api/fixture-detail/"
 DEFAULT_OFFLINE_STREAM = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 SPORT_ICONS = {
@@ -19,7 +18,7 @@ SPORT_ICONS = {
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
     "Origin": "https://giovang.co",
     "Referer": "https://giovang.co/",
@@ -53,18 +52,36 @@ def fetch_matches():
         print(f"[ERR] Không thể kết nối tới API: {e}")
     return []
 
-def get_real_stream_urls(match_id):
+def get_real_stream_urls(match):
+    match_id = match.get("fi") or match.get("id", "")
+    if not match_id:
+        return []
+
     urls = []
-    try:
-        res = requests.get(f"{DETAIL_API_URL}{match_id}", headers=HEADERS, timeout=5)
-        if res.status_code == 200:
-            found_urls = re.findall(r'https?://[^\s"\'\\]+\.m3u8[^\s"\'\\]*', res.text)
-            for u in found_urls:
-                clean_url = u.replace("\\/", "/")
-                if "no-signal" not in clean_url and "freem3u" not in clean_url:
-                    urls.append(clean_url)
-    except Exception as e:
-        print(f"[DEBUG] Lỗi lấy stream detail ({match_id}): {e}")
+    # Danh sách các trang xem trực tiếp chứa mã nhúng luồng m3u8
+    candidate_pages = [
+        f"https://giovang.co/truc-tiep/{match_id}",
+        f"https://giovang.rent/truc-tiep/{match_id}",
+        f"https://giovang.co/truc-tiep-match/{match_id}",
+    ]
+
+    for page_url in candidate_pages:
+        try:
+            res = requests.get(page_url, headers=HEADERS, timeout=6)
+            if res.status_code == 200:
+                # Tìm tất cả link .m3u8 trong HTML trang
+                found_urls = re.findall(r'https?://[^\s"\'\\]+\.m3u8[^\s"\'\\]*', res.text)
+                for u in found_urls:
+                    clean_url = u.replace("\\/", "/")
+                    if "no-signal" not in clean_url and "freem3u" not in clean_url:
+                        urls.append(clean_url)
+                
+                if urls:
+                    print(f"[DEBUG] Bóc tách thành công {len(urls)} link m3u8 từ {page_url}")
+                    break
+        except Exception as e:
+            print(f"[DEBUG] Lỗi cào stream ({page_url}): {e}")
+
     return list(set(urls))
 
 def generate_m3u():
@@ -76,7 +93,6 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
-        match_id = match.get("fi") or match.get("id", "")
         sport_type = str(match.get("type", "football")).lower()
         icon = SPORT_ICONS.get(sport_type, "⚽")
 
@@ -104,7 +120,8 @@ def generate_m3u():
         status_code = str(match.get("status_code", "")).upper()
         status_symbol = "🟢 " if (is_live or status_code == "LIVE") else "🟡 "
 
-        stream_urls = get_real_stream_urls(match_id)
+        # Gọi hàm lấy link m3u8 thật từ trang web
+        stream_urls = get_real_stream_urls(match)
         if not stream_urls:
             stream_urls = [DEFAULT_OFFLINE_STREAM]
 
@@ -132,3 +149,4 @@ def generate_m3u():
 
 if __name__ == "__main__":
     generate_m3u()
+    
