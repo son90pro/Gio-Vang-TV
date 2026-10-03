@@ -70,9 +70,16 @@ https://freem3u.xyz/static/no-signal/low.m3u8|Referer=https://giovang.rent/&User
 #EXTVLCOPT:http-origin=https://giovang.rent
 https://freem3u.xyz/static/no-signal/low.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36&Origin=https://giovang.rent
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/hong-kong.png" group-title="Giờ Vàng TV" http-referrer="https://giovang.rent/" http-user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36" , 🟢 17:00 03/10 ⚽ Hồng Kông vs Campuchia (Cay+dory) [hls]
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/hong-kong.png" group-title="Giờ Vàng TV" http-referrer="https://giovang.rent/" http-user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36" , 🟢 17:00 03/10 ⚽ Hồng Kông vs Campuchia (Cay+dory) [hls] - Luồng 1
 #EXTHTTP:{"headers": {"Referer": "https://giovang.rent/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36", "Origin": "https://giovang.rent"}}
 #EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
 #EXTVLCOPT:http-referrer=https://giovang.rent/
 #EXTVLCOPT:http-origin=https://giovang.rent
-https://freem3u.xyz/static/no-signal/low.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36&Origin=https://giovang.rent
+https://ftlh5sc02iliv.vcdn.cloud/376079032_hd/376079032_hd@720p.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36&Origin=https://giovang.rent
+
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/hong-kong.png" group-title="Giờ Vàng TV" http-referrer="https://giovang.rent/" http-user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36" , 🟢 17:00 03/10 ⚽ Hồng Kông vs Campuchia (Cay+dory) [hls] - Luồng 2
+#EXTHTTP:{"headers": {"Referer": "https://giovang.rent/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36", "Origin": "https://giovang.rent"}}
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+#EXTVLCOPT:http-referrer=https://giovang.rent/
+#EXTVLCOPT:http-origin=https://giovang.rent
+https://ftlh5sc01iliv.vcdn.cloud/376079032_hd/376079032_hd@720p.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36&Origin=https://giovang.rent
