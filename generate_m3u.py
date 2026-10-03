@@ -192,4 +192,3 @@ def generate_m3u():
 
 if __name__ == "__main__":
     generate_m3u()
-    
