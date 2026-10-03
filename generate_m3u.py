@@ -12,7 +12,7 @@ except ImportError:
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 DEFAULT_OFFLINE_STREAM = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
-# Danh sách các CDN Server của Giờ Vàng
+# Danh sách 2 CDN Server chạy song song của Giờ Vàng
 CDN_SERVERS = [
     "https://ftlh5sc02iliv.vcdn.cloud",
     "https://pzhgifbkllliv.vcdn.cloud"
@@ -58,7 +58,7 @@ def clean_blv_name(blv_raw):
     blv_map = {
         "diec": "Điếc", "vit": "Vịt", "bon": "Bốn", "tri": "Trí",
         "tom": "Tôm", "cay": "Cây", "sun": "Sun", "ben": "Bên",
-        "ngu": "Ngơ", "tuimu": "Túi Mù", "beo": "Béo"
+        "ngu": "Ngơ", "tuimu": "Túi Mù", "beo": "Béo", "mason": "Mason", "mickey": "Mickey"
     }
     return blv_map.get(name.lower(), name.capitalize())
 
@@ -72,27 +72,38 @@ def is_match_valid(match):
     return True
 
 def extract_stream_urls(match):
-    """Trích xuất danh sách link stream từ cả 2 CDN Server"""
+    """Trích xuất link stream chuẩn dựa trên ID/Timestamp trận đấu"""
     urls = []
     match_str = json.dumps(match)
-
-    # 1. Tìm ID phòng live
-    found_ids = re.findall(r'\b(17\d{7,8})\b', match_str)
     
-    if found_ids:
-        for sid in set(found_ids):
-            if not (sid.endswith("00") or sid.endswith("000")):
-                for cdn in CDN_SERVERS:
-                    urls.append(f"{cdn}/{sid}_hd/{sid}_hd@720p.m3u8")
+    # 1. Tìm trực tiếp nếu JSON chứa link .m3u8 thật
+    m3u8_matches = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
+    for link in m3u8_matches:
+        if "no-signal" not in link and "http" in link:
+            urls.append(link)
 
-    # 2. Nếu không tìm thấy ID, quét trực tiếp m3u8 có trong JSON
-    if not urls:
-        m3u8_matches = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
-        for link in m3u8_matches:
-            if "no-signal" not in link:
-                urls.append(link)
+    # 2. Bóc tách ID trận đấu/phòng live
+    candidate_ids = []
+    for key in ["room_id", "stream_id", "id", "bitrate_id", "code", "timestamp"]:
+        val = match.get(key)
+        if val is not None:
+            sval = str(val).strip()
+            if sval.isdigit() and len(sval) >= 5:
+                candidate_ids.append(sval)
 
-    return list(dict.fromkeys(urls))
+    if not candidate_ids:
+        found_nums = re.findall(r'\b\d{8,11}\b', match_str)
+        candidate_ids.extend(found_nums)
+
+    candidate_ids = list(dict.fromkeys(candidate_ids))
+
+    # Ghép ID tìm được vào cả 2 Server CDN
+    for cid in candidate_ids:
+        for cdn in CDN_SERVERS:
+            urls.append(f"{cdn}/{cid}_hd/{cid}_hd@720p.m3u8")
+
+    urls = list(dict.fromkeys(urls))
+    return urls if urls else [DEFAULT_OFFLINE_STREAM]
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -126,8 +137,6 @@ def generate_m3u():
             continue
 
         stream_urls = extract_stream_urls(match)
-        if not stream_urls:
-            stream_urls = [DEFAULT_OFFLINE_STREAM]
 
         sport_type = str(match.get("type", "football")).lower()
         league_name = str(match.get("league", {}).get("name", "")).lower()
