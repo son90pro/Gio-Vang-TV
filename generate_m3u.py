@@ -49,11 +49,13 @@ def is_match_valid(match):
 def extract_stream_urls(match_dict):
     match_str = json.dumps(match_dict)
     
+    # 1. Quét tìm trực tiếp URL vcdn.cloud trong JSON
     vcdn_urls = re.findall(r'https?://[^\s"\'\\]*vcdn\.cloud[^\s"\'\\]*\.m3u8', match_str)
     if vcdn_urls:
         clean_urls = [u.replace("\\/", "/") for u in vcdn_urls]
         return list(set(clean_urls))
 
+    # 2. Quét Stream ID 10 chữ số (17xxxxxxxx)
     ids = re.findall(r'\b(17\d{8,9})\b', match_str)
     if not ids:
         possible_keys = ["stream_id", "id_stream", "room_id", "channel_id", "fi", "stream_key"]
@@ -79,7 +81,7 @@ def fetch_matches():
             res_json = response.json()
             return res_json.get("response", [])
     except Exception as e:
-        print(f"[ERR] Error: {e}")
+        print(f"[ERR] Lỗi kết nối API: {e}")
     return []
 
 def generate_m3u():
@@ -141,13 +143,11 @@ def generate_m3u():
         for idx, stream_url in enumerate(stream_urls):
             display_title = title if len(stream_urls) == 1 else title.replace(" [hls]", f" - Luồng {idx + 1} [hls]")
             
+            # Ghi chuẩn cấu trúc 4 dòng theo mẫu
             m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {display_title}')
-            
-            if "vcdn.cloud" in stream_url:
-                # Inayon ti Referer ken User-Agent tapno maipatugaw iti IPTV player
-                m3u_lines.append(f"{stream_url}|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0")
-            else:
-                m3u_lines.append(stream_url)
+            m3u_lines.append('#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+            m3u_lines.append('#EXTVLCOPT:http-referrer=https://giovang.rent/')
+            m3u_lines.append(stream_url)
             m3u_lines.append("")
         
         count_added += 1
@@ -155,7 +155,7 @@ def generate_m3u():
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Success: {count_added} matches.")
+    print(f"Cập nhật thành công {count_added} trận vào giovang.m3u")
 
 if __name__ == "__main__":
     generate_m3u()
