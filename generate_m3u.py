@@ -1,7 +1,6 @@
 import re
 import time
 import json
-import unicodedata
 import requests
 
 try:
@@ -48,20 +47,15 @@ def is_match_valid(match):
     return True
 
 def extract_stream_urls(match_dict):
-    """Trích xuất link vcdn.cloud trực tiếp hoặc tự dựng từ Stream ID 10 chữ số"""
     match_str = json.dumps(match_dict)
     
-    # 1. Tìm trực tiếp URL vcdn.cloud dạng .m3u8 trong JSON
     vcdn_urls = re.findall(r'https?://[^\s"\'\\]*vcdn\.cloud[^\s"\'\\]*\.m3u8', match_str)
     if vcdn_urls:
         clean_urls = [u.replace("\\/", "/") for u in vcdn_urls]
         return list(set(clean_urls))
 
-    # 2. Tìm Stream ID dạng số (đặc trưng bắt đầu bằng 17xx, dài 9-11 chữ số của Giờ Vàng)
     ids = re.findall(r'\b(17\d{8,9})\b', match_str)
-    
     if not ids:
-        # Kiểm tra thêm các trường dữ liệu số phổ biến
         possible_keys = ["stream_id", "id_stream", "room_id", "channel_id", "fi", "stream_key"]
         for key in possible_keys:
             val = str(match_dict.get(key, ""))
@@ -83,10 +77,9 @@ def fetch_matches():
         response = session.get(url, headers=HEADERS, timeout=12)
         if response.status_code == 200:
             res_json = response.json()
-            matches = res_json.get("response", [])
-            return matches
+            return res_json.get("response", [])
     except Exception as e:
-        print(f"[ERR] Không thể kết nối API: {e}")
+        print(f"[ERR] Error: {e}")
     return []
 
 def generate_m3u():
@@ -98,10 +91,8 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
-        # Lấy link stream thực tế
         stream_urls = extract_stream_urls(match)
 
-        # Xử lý Icon môn thể thao
         sport_type = str(match.get("type", "football")).lower()
         league_name = str(match.get("league", {}).get("name", "")).lower()
         
@@ -112,7 +103,6 @@ def generate_m3u():
         else:
             icon = SPORT_ICONS.get(sport_type, "⚽")
 
-        # Thời gian và thông tin đội bóng
         time_str = match.get("time", "00:00:00")[:5]
         day_month = match.get("day_month", "")
 
@@ -133,7 +123,6 @@ def generate_m3u():
         blv_raw = match.get("blv", [])
         blv_name = blv_raw[0] if isinstance(blv_raw, list) and blv_raw else str(blv_raw or "BLV")
 
-        # Ký hiệu trạng thái phát trận đấu
         is_live = match.get("is_live", False)
         status_code = str(match.get("status_code", "")).upper()
 
@@ -144,7 +133,6 @@ def generate_m3u():
         else:
             status_symbol = ""
 
-        # Luồng mặc định nếu không tìm thấy stream
         if not stream_urls:
             stream_urls = [DEFAULT_OFFLINE_STREAM]
 
@@ -153,9 +141,13 @@ def generate_m3u():
         for idx, stream_url in enumerate(stream_urls):
             display_title = title if len(stream_urls) == 1 else title.replace(" [hls]", f" - Luồng {idx + 1} [hls]")
             
-            # Định dạng chính xác chuẩn 100% mẫu của anh Sơn
             m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {display_title}')
-            m3u_lines.append(stream_url)
+            
+            if "vcdn.cloud" in stream_url:
+                # Inayon ti Referer ken User-Agent tapno maipatugaw iti IPTV player
+                m3u_lines.append(f"{stream_url}|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0")
+            else:
+                m3u_lines.append(stream_url)
             m3u_lines.append("")
         
         count_added += 1
@@ -163,7 +155,7 @@ def generate_m3u():
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Đã cập nhật danh sách thành công: {count_added} trận.")
+    print(f"Success: {count_added} matches.")
 
 if __name__ == "__main__":
     generate_m3u()
