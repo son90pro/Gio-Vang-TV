@@ -11,7 +11,6 @@ except ImportError:
 
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 DEFAULT_OFFLINE_STREAM = "https://freem3u.xyz/static/no-signal/low.m3u8"
-PRIMARY_CDN = "https://ftlh5sc02iliv.vcdn.cloud"
 
 SPORT_ICONS = {
     "football": "⚽", "bongda": "⚽",
@@ -41,7 +40,10 @@ def create_http_session():
 
 def clean_blv_name(blv_raw):
     if isinstance(blv_raw, list) and blv_raw:
-        name = str(blv_raw[0])
+        if isinstance(blv_raw[0], dict):
+            name = str(blv_raw[0].get("name") or blv_raw[0].get("nickname") or "BLV")
+        else:
+            name = str(blv_raw[0])
     else:
         name = str(blv_raw or "BLV")
 
@@ -62,52 +64,38 @@ def is_match_valid(match):
         return False
     return True
 
-def extract_real_room_id(match):
-    # 1. Lấy mốc timestamp giờ trận đấu để lọc prefix (ví dụ 17910)
-    ts = match.get("timestamp") or match.get("time_stamp") or match.get("start_time") or int(time.time())
-    ts_str = str(ts).strip()
-    prefix = ts_str[:5] if len(ts_str) >= 5 else "17910"
-
-    # 2. Tìm ID từ các key chuyên biệt (loại trừ trùng khớp với timestamp giờ)
-    for key in ["room_id", "bitrate_id", "stream_id", "channel_id", "room", "bitrate"]:
-        val = match.get(key)
-        if val is not None:
-            sval = str(val).strip()
-            if sval and sval != ts_str:
-                if len(sval) == 10 and sval.startswith("17") and not sval.endswith("00"):
-                    return sval
-                elif len(sval) in [4, 5, 6] and sval.isdigit():
-                    return f"{prefix}{sval}"
-
-    # 3. Lấy từ key "id" chính của trận đấu (ví dụ 11626, 11695)
-    match_id = match.get("id")
-    if match_id is not None:
-        sval = str(match_id).strip()
-        if sval and sval != ts_str:
-            if len(sval) == 10 and sval.startswith("17") and not sval.endswith("00"):
-                return sval
-            elif len(sval) in [4, 5, 6] and sval.isdigit():
-                return f"{prefix}{sval}"
-
-    # 4. Quét regex tìm chuỗi ID 4-6 số trong JSON khác với timestamp
-    match_str = json.dumps(match)
-    short_ids = re.findall(r'\b\d{4,6}\b', match_str)
-    for sid in short_ids:
-        if sid != ts_str:
-            return f"{prefix}{sid}"
-
-    # 5. Dự phòng chuỗi 10 số khác mốc giờ
-    long_ids = re.findall(r'\b17\d{8}\b', match_str)
-    for lid in long_ids:
-        if lid != ts_str and not lid.endswith("00"):
-            return lid
-
-    return None
+def recursive_find_m3u8(data):
+    """Tìm kiếm tất cả các URL chứa .m3u8 hoặc link stream trong toàn bộ cấu trúc JSON"""
+    urls = []
+    if isinstance(data, dict):
+        for k, v in data.items():
+            urls.extend(recursive_find_m3u8(v))
+    elif isinstance(data, list):
+        for item in data:
+            urls.extend(recursive_find_m3u8(item))
+    elif isinstance(data, str):
+        if data.startswith("http") and (".m3u8" in data or "vcdn" in data or "stream" in data or "hls" in data):
+            urls.append(data)
+    return urls
 
 def extract_stream_url(match):
-    room_id = extract_real_room_id(match)
-    if room_id:
-        return f"{PRIMARY_CDN}/{room_id}_hd/{room_id}_hd@720p.m3u8"
+    # 1. Tìm kiếm đệ quy toàn bộ link m3u8 có trong match
+    found_urls = recursive_find_m3u8(match)
+    if found_urls:
+        return found_urls[0]
+
+    # 2. Quét chuỗi JSON tìm link m3u8 bằng Regex
+    match_str = json.dumps(match)
+    direct_m3u8 = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
+    if direct_m3u8:
+        return direct_m3u8[0]
+
+    # 3. Quét tìm URL bất kỳ bắt đầu bằng http(s)
+    all_http_urls = re.findall(r'https?://[^\s"]+', match_str)
+    for url in all_http_urls:
+        if not any(ext in url for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]):
+            return url
+
     return DEFAULT_OFFLINE_STREAM
 
 def fetch_matches():
@@ -128,6 +116,11 @@ def generate_m3u():
     matches = fetch_matches()
     m3u_lines = ["#EXTM3U"]
     count_added = 0
+
+    if matches:
+        print("\n================ DATA MATCH MAU GIOC ===============")
+        print(json.dumps(matches[0], ensure_ascii=False, indent=2))
+        print("===================================================\n")
 
     for match in matches:
         if not is_match_valid(match):
