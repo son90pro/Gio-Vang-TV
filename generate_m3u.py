@@ -22,7 +22,6 @@ SPORT_ICONS = {
     "f1": "[formula1]", "formula1": "[formula1]", "racing": "[formula1]"
 }
 
-# Referer chính xác theo domain hiển thị trên luồng phát video
 REFERER_URL = "https://giovang.co/"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
@@ -42,16 +41,14 @@ def create_http_session():
     return session
 
 def clean_blv_name(blv_raw):
-    """Xử lý định dạng tên BLV gọn đẹp tiếng Việt có dấu"""
+    """Định dạng tên BLV sang tiếng Việt có dấu"""
     if isinstance(blv_raw, list) and blv_raw:
         name = str(blv_raw[0])
     else:
         name = str(blv_raw or "BLV")
 
-    # Xóa tiền tố blv- hoặc blv_
     name = re.sub(r'^(blv[-_]?|BLV[-_]?)', '', name, flags=re.IGNORECASE).strip()
     
-    # Bảng quy đổi slug BLV sang tên tiếng Việt
     blv_map = {
         "diec": "Điếc",
         "vit": "Vịt",
@@ -64,7 +61,6 @@ def clean_blv_name(blv_raw):
         "ngu": "Ngơ",
         "tuimu": "Túi Mù"
     }
-    
     return blv_map.get(name.lower(), name.capitalize())
 
 def is_match_valid(match):
@@ -77,16 +73,16 @@ def is_match_valid(match):
     return True
 
 def extract_stream_urls(match_dict):
-    """Trích xuất link m3u8 thực tế"""
+    """Trích xuất linh hoạt nhiều cụm máy chủ CDN tránh chết link"""
     match_str = json.dumps(match_dict)
     
-    # 1. Ưu tiên quét URL m3u8 trực tiếp từ JSON
+    # 1. Tìm trực tiếp URL m3u8 có trong dữ liệu JSON
     found_urls = re.findall(r'https?://[^\s"\'\\]+\.m3u8[^\s"\'\\]*', match_str)
     if found_urls:
         clean_urls = list(set([u.replace("\\/", "/") for u in found_urls]))
         return clean_urls
 
-    # 2. Nếu không có URL trực tiếp, tìm ID 10 chữ số
+    # 2. Tìm Stream ID và tạo luồng trên các cụm CDN dự phòng
     ids = re.findall(r'\b(17\d{8,9})\b', match_str)
     if not ids:
         possible_keys = ["stream_id", "id_stream", "room_id", "channel_id", "fi", "stream_key"]
@@ -95,11 +91,15 @@ def extract_stream_urls(match_dict):
             if re.match(r'^\d{8,11}$', val):
                 ids.append(val)
 
+    urls = []
     if ids:
         unique_ids = list(set(ids))
-        return [f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8" for sid in unique_ids]
-
-    return []
+        # Tạo ưu tiên cụm CDN chính và cụm dự phòng
+        for sid in unique_ids:
+            urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
+            urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
+    
+    return urls
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -112,7 +112,7 @@ def fetch_matches():
             res_json = response.json()
             return res_json.get("response", [])
     except Exception as e:
-        print(f"[ERR] Lỗi kết nối API: {e}")
+        print(f"[ERR] Lỗi API: {e}")
     return []
 
 def generate_m3u():
@@ -153,7 +153,6 @@ def generate_m3u():
             or ""
         )
 
-        # Định dạng BLV chuẩn tiếng Việt
         blv_raw = match.get("blv", [])
         blv_formatted = clean_blv_name(blv_raw)
 
@@ -170,15 +169,21 @@ def generate_m3u():
         if not stream_urls:
             stream_urls = [DEFAULT_OFFLINE_STREAM]
 
-        # Định dạng chuẩn: (Điếc) thay vì (blv-diec)
         title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
 
         for idx, stream_url in enumerate(stream_urls):
-            display_title = title if len(stream_urls) == 1 else title.replace(" [hls]", f" - Luồng {idx + 1} [hls]")
+            display_title = title if len(stream_urls) == 1 else title.replace(" [hls]", f" - Server {idx + 1} [hls]")
             
-            m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {display_title}')
+            # Ghi Header dạng Attributes trực tiếp trong #EXTINF
+            extinf_line = (
+                f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
+                f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}" , {display_title}'
+            )
+            
+            m3u_lines.append(extinf_line)
             m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
             m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
+            m3u_lines.append(f'#EXTHTTP:{{"User-Agent":"{USER_AGENT}","Referer":"{REFERER_URL}"}}')
             m3u_lines.append(stream_url)
             m3u_lines.append("")
         
@@ -187,7 +192,7 @@ def generate_m3u():
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Cập nhật thành công {count_added} trận vào giovang.m3u")
+    print(f"Thành công: Đã xuất {count_added} trận đấu.")
 
 if __name__ == "__main__":
     generate_m3u()
