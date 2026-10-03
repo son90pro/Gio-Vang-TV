@@ -22,7 +22,6 @@ SPORT_ICONS = {
     "f1": "[formula1]", "formula1": "[formula1]", "racing": "[formula1]"
 }
 
-# Cập nhật Domain Referer chính xác theo trang web hiện tại
 REFERER_URL = "https://giovang.rent/"
 ORIGIN_URL = "https://giovang.rent"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -44,25 +43,16 @@ def create_http_session():
     return session
 
 def clean_blv_name(blv_raw):
-    """Định dạng tên BLV sang tiếng Việt có dấu chuẩn"""
     if isinstance(blv_raw, list) and blv_raw:
         name = str(blv_raw[0])
     else:
         name = str(blv_raw or "BLV")
 
     name = re.sub(r'^(blv[-_]?|BLV[-_]?)', '', name, flags=re.IGNORECASE).strip()
-    
     blv_map = {
-        "diec": "Điếc",
-        "vit": "Vịt",
-        "bon": "Bốn",
-        "tri": "Trí",
-        "tom": "Tôm",
-        "cay": "Cây",
-        "sun": "Sun",
-        "ben": "Bên",
-        "ngu": "Ngơ",
-        "tuimu": "Túi Mù"
+        "diec": "Điếc", "vit": "Vịt", "bon": "Bốn", "tri": "Trí",
+        "tom": "Tôm", "cay": "Cây", "sun": "Sun", "ben": "Bên",
+        "ngu": "Ngơ", "tuimu": "Túi Mù"
     }
     return blv_map.get(name.lower(), name.capitalize())
 
@@ -75,41 +65,28 @@ def is_match_valid(match):
         return False
     return True
 
-def extract_stream_urls(match_dict):
-    """Bóc tách hoặc khởi tạo URL stream đúng định dạng CDN vcdn.cloud"""
+def generate_stream_urls_from_match(match_dict):
+    """Tạo chính xác các luồng CDN theo cấu trúc ID vcdn.cloud"""
     urls = []
-
-    def recursive_search_m3u8(obj):
-        if isinstance(obj, str):
-            if ".m3u8" in obj:
-                clean_url = obj.replace("\\/", "/")
-                if clean_url.startswith("http"):
-                    urls.append(clean_url)
-        elif isinstance(obj, dict):
-            for val in obj.values():
-                recursive_search_m3u8(val)
-        elif isinstance(obj, list):
-            for item in obj:
-                recursive_search_m3u8(item)
-
-    recursive_search_m3u8(match_dict)
-
-    if urls:
-        return list(set(urls))
-
-    # Tự tạo luồng từ Stream ID chuẩn xác tìm được từ DevTools
+    
+    # Quét tất cả chuỗi số dạng ID trận (9-10 chữ số)
     match_str = json.dumps(match_dict)
-    ids = re.findall(r'\b(17\d{8,9})\b', match_str)
-    if ids:
-        unique_ids = list(set(ids))
-        fallback_urls = []
-        for sid in unique_ids:
-            # Tạo cụm máy chủ CDN chính và dự phòng
-            fallback_urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
-            fallback_urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8")
-        return fallback_urls
+    found_ids = re.findall(r'\b(17\d{7,8})\b', match_str)
+    
+    base_ids = list(set(found_ids))
+    
+    for base_id in base_ids:
+        # Nếu ID đã có 10 chữ số (đã chứa sẵn hậu tố BLV)
+        if len(base_id) == 10:
+            urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{base_id}_hd/{base_id}_hd@720p.m3u8")
+        else:
+            # Tự động sinh ra các luồng ID kèm hậu tố (gốc, 1, 2, 3, 4)
+            for suffix in ["", "1", "2", "3", "4"]:
+                full_id = f"{base_id}{suffix}"
+                urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{full_id}_hd/{full_id}_hd@720p.m3u8")
+                urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{full_id}_hd/{full_id}_hd@720p.m3u8")
 
-    return []
+    return list(dict.fromkeys(urls))
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -122,7 +99,7 @@ def fetch_matches():
             res_json = response.json()
             return res_json.get("response", [])
     except Exception as e:
-        print(f"[ERR] Lỗi API: {e}")
+        print(f"[ERR] Lỗi kết nối API: {e}")
     return []
 
 def generate_m3u():
@@ -130,11 +107,19 @@ def generate_m3u():
     m3u_lines = ["#EXTM3U\n"]
     count_added = 0
 
+    ext_http_json = json.dumps({
+        "headers": {
+            "Referer": REFERER_URL,
+            "User-Agent": USER_AGENT,
+            "Origin": ORIGIN_URL
+        }
+    })
+
     for match in matches:
         if not is_match_valid(match):
             continue
 
-        stream_urls = extract_stream_urls(match)
+        stream_urls = generate_stream_urls_from_match(match)
 
         sport_type = str(match.get("type", "football")).lower()
         league_name = str(match.get("league", {}).get("name", "")).lower()
@@ -182,23 +167,19 @@ def generate_m3u():
         title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
 
         for idx, stream_url in enumerate(stream_urls):
-            display_title = title if len(stream_urls) == 1 else title.replace(" [hls]", f" - Luồng {idx + 1} [hls]")
+            display_title = title if len(stream_urls) == 1 else f"{title} - Luồng {idx + 1}"
             
-            # Khai báo Header đa phương thức cho TiviMate / IPTV / VLC
             m3u_lines.append(
                 f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
                 f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}" , {display_title}'
             )
+            m3u_lines.append(f'#EXTHTTP:{ext_http_json}')
             m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
             m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
             m3u_lines.append(f'#EXTVLCOPT:http-origin={ORIGIN_URL}')
             
-            # Gắn nối pipe Header trực tiếp vào đuôi URL
-            if "vcdn.cloud" in stream_url and "|" not in stream_url:
-                final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}&Origin={ORIGIN_URL}"
-            else:
-                final_url = stream_url
-
+            # Gắn nối pipe Header trực tiếp vào URL
+            final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}&Origin={ORIGIN_URL}"
             m3u_lines.append(final_url)
             m3u_lines.append("")
         
@@ -207,7 +188,7 @@ def generate_m3u():
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Cập nhật thành công {count_added} trận vào giovang.m3u")
+    print(f"Đã cập nhật thành công {count_added} trận vào giovang.m3u")
 
 if __name__ == "__main__":
     generate_m3u()
