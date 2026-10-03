@@ -58,7 +58,7 @@ def clean_blv_name(blv_raw):
         "diec": "Điếc", "vit": "Vịt", "bon": "Bốn", "tri": "Trí",
         "tom": "Tôm", "cay": "Cây", "cầy": "Cầy", "sun": "Sun", "ben": "Bên",
         "ngu": "Ngơ", "tuimu": "Túi Mù", "beo": "Béo", "mason": "Mason", "mickey": "Mickey",
-        "dory": "Dory", "bee": "Bee", "riko": "riko"
+        "dory": "Dory", "bee": "Bee", "riko": "riko", "sup": "sup", "ngong": "ngong", "can": "can"
     }
 
     clean_key = re.sub(r'^(blv[-_]?|BLV[-_]?)', '', raw_lower).strip()
@@ -78,38 +78,23 @@ def is_match_valid(match):
         return False
     return True
 
-def extract_stream_url(match):
-    is_live = match.get("is_live", False)
-    status_code = str(match.get("status_code", "")).upper()
-
-    # Quy tắc cốt lõi: Chỉ trận ĐANG LIVE mới có link stream VCDN, trận chưa live dùng link offline
-    if not (is_live or status_code == "LIVE"):
+def build_vcdn_url(match):
+    # Lấy ID trận đấu (ví dụ: 11626, 34312, 67663)
+    match_id = str(match.get("id", "")).strip()
+    if not match_id or not match_id.isdigit():
         return DEFAULT_OFFLINE_STREAM
 
-    # Lấy ID trận đấu
-    raw_id = None
-    for key in ["bitrate_id", "room_id", "stream_id", "channel_id", "room", "bitrate", "id"]:
-        val = match.get(key)
-        if val is not None:
-            sval = str(val).strip()
-            # Bỏ qua mốc giờ tròn (timestamp kết thúc bằng 00)
-            if sval and not (len(sval) == 10 and sval.endswith("00")):
-                raw_id = sval
-                break
+    # Lấy 5 số đầu của Timestamp
+    ts = match.get("timestamp") or match.get("time_stamp") or match.get("start_time") or int(time.time())
+    ts_str = str(ts).strip()
+    prefix = ts_str[:5] if len(ts_str) >= 5 else "17910"
 
-    if raw_id:
-        # Nếu đã là ID 10 số hoàn chỉnh
-        if len(raw_id) == 10 and raw_id.isdigit():
-            return f"{PRIMARY_CDN}/{raw_id}_hd/{raw_id}_hd@720p.m3u8"
+    # Format ID trận đủ 5 chữ số
+    formatted_id = match_id.zfill(5)
 
-        # Nếu là ID ngắn (1-5 số), ghép prefix timestamp 5 số + ID zfill 5 chữ số
-        if raw_id.isdigit():
-            ts = str(match.get("timestamp") or match.get("time_stamp") or match.get("start_time") or int(time.time())).strip()
-            prefix = ts[:5] if len(ts) >= 5 else "17910"
-            full_room = f"{prefix}{raw_id.zfill(5)}"
-            return f"{PRIMARY_CDN}/{full_room}_hd/{full_room}_hd@720p.m3u8"
-
-    return DEFAULT_OFFLINE_STREAM
+    # Ghép chuẩn công thức VCDN
+    stream_id = f"{prefix}{formatted_id}"
+    return f"{PRIMARY_CDN}/{stream_id}_hd/{stream_id}_hd@720p.m3u8"
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -134,7 +119,8 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
-        stream_url = extract_stream_url(match)
+        # Luôn tạo đường dẫn VCDN chuẩn cho từng trận
+        stream_url = build_vcdn_url(match)
 
         sport_type = str(match.get("type", "football")).lower()
         league_name = str(match.get("league", {}).get("name", "")).lower()
@@ -168,12 +154,12 @@ def generate_m3u():
         blv_raw = match.get("blv", [])
         blv_formatted = clean_blv_name(blv_raw)
 
-        is_live = match.get("is_live", False)
+        is_live = match.get("is_live") in [True, 1, "1", "true", "True"]
         status_code = str(match.get("status_code", "")).upper()
 
         if is_live or status_code == "LIVE":
             status_symbol = "🟢 "
-        elif status_code in ["WAITING"]:
+        elif status_code in ["WAITING", "UPCOMING", "0"]:
             status_symbol = "🟡 "
         else:
             status_symbol = ""
