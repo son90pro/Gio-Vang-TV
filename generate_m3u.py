@@ -11,12 +11,7 @@ except ImportError:
 
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 DEFAULT_OFFLINE_STREAM = "https://freem3u.xyz/static/no-signal/low.m3u8"
-
-# 2 Server CDN chuẩn của Giờ Vàng
-CDN_SERVERS = [
-    "https://ftlh5sc02iliv.vcdn.cloud",
-    "https://pzhgifbkllliv.vcdn.cloud"
-]
+PRIMARY_CDN = "https://ftlh5sc02iliv.vcdn.cloud"
 
 SPORT_ICONS = {
     "football": "⚽", "bongda": "⚽",
@@ -28,13 +23,10 @@ SPORT_ICONS = {
     "f1": "[formula1]", "formula1": "[formula1]", "racing": "[formula1]"
 }
 
-REFERER_URL = "https://giovang.rent/"
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-
 HEADERS = {
-    "User-Agent": USER_AGENT,
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
-    "Referer": REFERER_URL,
+    "Referer": "https://giovang.rent/",
     "Origin": "https://giovang.rent"
 }
 
@@ -86,15 +78,11 @@ def extract_real_room_id(match):
 
     return None
 
-def extract_stream_urls(match):
-    urls = []
+def extract_stream_url(match):
     room_id = extract_real_room_id(match)
-    
     if room_id:
-        for cdn in CDN_SERVERS:
-            urls.append(f"{cdn}/{room_id}_hd/{room_id}_hd@720p.m3u8")
-
-    return urls if urls else [DEFAULT_OFFLINE_STREAM]
+        return f"{PRIMARY_CDN}/{room_id}_hd/{room_id}_hd@720p.m3u8"
+    return DEFAULT_OFFLINE_STREAM
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -119,7 +107,7 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
-        stream_urls = extract_stream_urls(match)
+        stream_url = extract_stream_url(match)
 
         sport_type = str(match.get("type", "football")).lower()
         league_name = str(match.get("league", {}).get("name", "")).lower()
@@ -161,26 +149,22 @@ def generate_m3u():
         else:
             status_symbol = ""
 
-        base_title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
+        # Chuẩn hóa tên trận đúng mẫu
+        title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
 
-        for idx, stream_url in enumerate(stream_urls):
-            server_label = f" - Sv{idx + 1}" if len(stream_urls) > 1 else ""
-            title = f"{base_title}{server_label}"
-
-            # Dòng 1: Cấu trúc #EXTINF chuẩn truyền thống
-            m3u_lines.append(
-                f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
-                f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}", {title}'
-            )
-            # Dòng 2: Link stream sạch (URL nguyên bản không chứa pipe |)
-            m3u_lines.append(stream_url)
+        # Dòng 1: Đuôi #EXTINF khớp 100% mẫu chuẩn SportTV
+        m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}')
+        # Dòng 2: Link CDN sạch
+        m3u_lines.append(stream_url)
+        # Thêm 1 dòng trống phân cách giữa các trận
+        m3u_lines.append("")
 
         count_added += 1
 
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Đã cập nhật thành công {count_added} trận vào giovang.m3u (Format Chuẩn 2 Dòng)")
+    print(f"Đã cập nhật thành công {count_added} trận vào giovang.m3u (Khớp mẫu 100%)")
 
 if __name__ == "__main__":
     generate_m3u()
