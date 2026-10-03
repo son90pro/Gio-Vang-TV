@@ -52,7 +52,7 @@ def clean_blv_name(blv_raw):
     blv_map = {
         "diec": "Điếc", "vit": "Vịt", "bon": "Bốn", "tri": "Trí",
         "tom": "Tôm", "cay": "Cây", "sun": "Sun", "ben": "Bên",
-        "ngu": "Ngơ", "tuimu": "Túi Mù"
+        "ngu": "Ngơ", "tuimu": "Túi Mù", "beo": "Béo"
     }
     return blv_map.get(name.lower(), name.capitalize())
 
@@ -65,28 +65,35 @@ def is_match_valid(match):
         return False
     return True
 
-def extract_stream_urls_direct(match_dict):
-    """Biroken dagiti direct m3u8 URLs wenno valid stream IDs manipud iti match object"""
-    urls = []
-    match_str = json.dumps(match_dict)
+def extract_real_stream_url(match):
+    """Trích xuất duy nhất link stream chuẩn đang phát từ server"""
+    match_str = json.dumps(match)
 
-    # 1. Biroken no adda direct .m3u8 links iti JSON
-    m3u8_links = re.findall(r'https?://[^\s"]+\.m3u8', match_str)
-    if m3u8_links:
-        for link in m3u8_links:
-            if "no-signal" not in link:
-                urls.append(link)
+    # 1. Tìm trực tiếp nếu API trả về link .m3u8
+    m3u8_matches = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
+    for link in m3u8_matches:
+        if "no-signal" not in link:
+            return link
 
-    # 2. No awan direct .m3u8 links, biroken dagiti 9-10 digit numbers
-    if not urls:
-        all_digits = re.findall(r'\b(\d{9,10})\b', match_str)
-        for d in set(all_digits):
-            # Isina dagiti unix timestamp nga agsardeng iti '00' wenno '000'
-            if not (d.endswith("00") or d.endswith("000")):
-                urls.append(f"https://ftlh5sc02iliv.vcdn.cloud/{d}_hd/{d}_hd@720p.m3u8")
-                urls.append(f"https://ftlh5sc01iliv.vcdn.cloud/{d}_hd/{d}_hd@720p.m3u8")
+    # 2. Lấy room_id hoặc stream_id từ đối tượng trận đấu
+    room_id = match.get("room_id") or match.get("stream_id")
+    if not room_id and isinstance(match.get("id"), (str, int)):
+        cand_id = str(match.get("id"))
+        if not (cand_id.endswith("00") or cand_id.endswith("000")):
+            room_id = cand_id
 
-    return list(dict.fromkeys(urls))
+    # 3. Tìm qua regex chuỗi ID 9-10 số nếu chưa tìm thấy
+    if not room_id:
+        ids = re.findall(r'\b(17\d{7,8})\b', match_str)
+        for sid in ids:
+            if not (sid.endswith("00") or sid.endswith("000")):
+                room_id = sid
+                break
+
+    if room_id:
+        return f"https://ftlh5sc02iliv.vcdn.cloud/{room_id}_hd/{room_id}_hd@720p.m3u8"
+
+    return DEFAULT_OFFLINE_STREAM
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -119,7 +126,7 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
-        stream_urls = extract_stream_urls_direct(match)
+        stream_url = extract_real_stream_url(match)
 
         sport_type = str(match.get("type", "football")).lower()
         league_name = str(match.get("league", {}).get("name", "")).lower()
@@ -161,26 +168,20 @@ def generate_m3u():
         else:
             status_symbol = ""
 
-        if not stream_urls:
-            stream_urls = [DEFAULT_OFFLINE_STREAM]
-
         title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv_formatted}) [hls]"
 
-        for idx, stream_url in enumerate(stream_urls):
-            display_title = title if len(stream_urls) == 1 else f"{title} - Luồng {idx + 1}"
-            
-            m3u_lines.append(
-                f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
-                f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}" , {display_title}'
-            )
-            m3u_lines.append(f'#EXTHTTP:{ext_http_json}')
-            m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
-            m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
-            m3u_lines.append(f'#EXTVLCOPT:http-origin={ORIGIN_URL}')
-            
-            final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}&Origin={ORIGIN_URL}"
-            m3u_lines.append(final_url)
-            m3u_lines.append("")
+        m3u_lines.append(
+            f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
+            f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}" , {title}'
+        )
+        m3u_lines.append(f'#EXTHTTP:{ext_http_json}')
+        m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
+        m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
+        m3u_lines.append(f'#EXTVLCOPT:http-origin={ORIGIN_URL}')
+        
+        final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}&Origin={ORIGIN_URL}"
+        m3u_lines.append(final_url)
+        m3u_lines.append("")
         
         count_added += 1
 
