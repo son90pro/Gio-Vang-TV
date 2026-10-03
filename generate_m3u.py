@@ -63,43 +63,36 @@ def is_match_valid(match):
     return True
 
 def extract_real_room_id(match):
-    """Bóc tách chính xác room_id, loại bỏ trường Timestamp thời gian"""
-    # 1. Ưu tiên lấy trực tiếp các key chứa ID phòng thực sự
-    for key in ["room_id", "bitrate_id", "stream_id", "room", "channel_id"]:
-        val = match.get(key)
-        if val is not None:
-            sval = str(val).strip()
-            if sval.isdigit() and len(sval) >= 8:
-                return sval
+    """Bóc tách chính xác room_id, phân biệt triệt để với Unix Timestamp"""
+    match_str = json.dumps(match)
 
-    # 2. Loại bỏ các key liên quan đến mốc thời gian để tránh lấy nhầm Unix Timestamp
-    ignore_keys = {"timestamp", "time", "date", "created_at", "updated_at", "start_time", "end_time", "match_time"}
+    # 1. Nếu trong JSON API có sẵn URL .m3u8, bóc trực tiếp room_id từ URL
+    m3u8_urls = re.findall(r'https?://[^\s"]+\.m3u8', match_str)
+    for url in m3u8_urls:
+        room_match = re.findall(r'/(\d{8,10})_hd/', url)
+        if room_match:
+            return room_match[0]
 
-    def find_ids_recursive(obj):
-        found = []
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                k_lower = str(k).lower()
-                if k_lower in ignore_keys or "time" in k_lower or "date" in k_lower or "stamp" in k_lower:
-                    continue
-                found.extend(find_ids_recursive(v))
-        elif isinstance(obj, list):
-            for item in obj:
-                found.extend(find_ids_recursive(item))
-        elif isinstance(obj, (int, str)):
-            sval = str(obj).strip()
-            # ID room thường có dạng 10 chữ số bắt đầu bằng 17
-            if sval.isdigit() and len(sval) >= 8 and sval.startswith("17"):
-                found.append(sval)
-        return found
+    # 2. Tìm tất cả chuỗi số 8-10 chữ số bắt đầu bằng 17
+    all_ids = re.findall(r'\b17\d{6,8}\b', match_str)
+    
+    valid_room_ids = []
+    for sid in all_ids:
+        try:
+            val = int(sid)
+            # Timestamp mốc giờ trận đấu (như 1791043200) luôn chia hết cho 60
+            # Room ID thực tế (như 1791011626) KHÔNG chia hết cho 60
+            if val % 60 != 0:
+                valid_room_ids.append(sid)
+        except ValueError:
+            continue
 
-    candidate_ids = find_ids_recursive(match)
-    # Lọc bỏ các giá trị tròn giờ timestamp (thường kết thúc bằng 00 hoặc 0000)
-    valid_ids = [i for i in candidate_ids if not i.endswith("0000")]
-    if valid_ids:
-        return valid_ids[0]
-    elif candidate_ids:
-        return candidate_ids[0]
+    if valid_room_ids:
+        return valid_room_ids[0]
+
+    # Nếu không lọc được theo % 60, ưu tiên lấy số xuất hiện sau cùng trong match object
+    if all_ids:
+        return all_ids[-1]
 
     return None
 
