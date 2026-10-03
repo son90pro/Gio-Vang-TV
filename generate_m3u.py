@@ -65,24 +65,33 @@ def is_match_valid(match):
         return False
     return True
 
-def extract_real_stream_url(match):
-    """Trích xuất duy nhất link stream chuẩn đang phát từ server"""
-    match_str = json.dumps(match)
+def find_m3u8_recursive(data):
+    """Tìm kiếm tất cả các đường dẫn .m3u8 trong cấu trúc JSON phức tạp"""
+    found_urls = []
+    if isinstance(data, dict):
+        for k, v in data.items():
+            found_urls.extend(find_m3u8_recursive(v))
+    elif isinstance(data, list):
+        for item in data:
+            found_urls.extend(find_m3u8_recursive(item))
+    elif isinstance(data, str):
+        if ".m3u8" in data:
+            urls = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', data)
+            found_urls.extend(urls)
+    return found_urls
 
-    # 1. Tìm trực tiếp nếu API trả về link .m3u8
-    m3u8_matches = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
-    for link in m3u8_matches:
-        if "no-signal" not in link:
+def extract_real_stream_url(match):
+    """Trích xuất link stream chính xác nhất từ match object"""
+    # 1. Quét tìm toàn bộ link .m3u8 thật trong JSON
+    m3u8_list = find_m3u8_recursive(match)
+    for link in m3u8_list:
+        if "no-signal" not in link and "http" in link:
             return link
 
-    # 2. Lấy room_id hoặc stream_id từ đối tượng trận đấu
-    room_id = match.get("room_id") or match.get("stream_id")
-    if not room_id and isinstance(match.get("id"), (str, int)):
-        cand_id = str(match.get("id"))
-        if not (cand_id.endswith("00") or cand_id.endswith("000")):
-            room_id = cand_id
-
-    # 3. Tìm qua regex chuỗi ID 9-10 số nếu chưa tìm thấy
+    # 2. Nếu không có m3u8 trực tiếp, tìm ID phòng để ghép link VCDN
+    match_str = json.dumps(match)
+    room_id = match.get("room_id") or match.get("stream_id") or match.get("bitrate_id")
+    
     if not room_id:
         ids = re.findall(r'\b(17\d{7,8})\b', match_str)
         for sid in ids:
@@ -177,9 +186,9 @@ def generate_m3u():
         m3u_lines.append(f'#EXTHTTP:{ext_http_json}')
         m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
         m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
-        m3u_lines.append(f'#EXTVLCOPT:http-origin={ORIGIN_URL}')
         
-        final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}&Origin={ORIGIN_URL}"
+        # Chỉ truyền duy nhất tham số Referer qua Pipe để tránh ExoPlayer bị xung đột
+        final_url = f"{stream_url}|Referer={REFERER_URL}"
         m3u_lines.append(final_url)
         m3u_lines.append("")
         
@@ -192,3 +201,4 @@ def generate_m3u():
 
 if __name__ == "__main__":
     generate_m3u()
+    
