@@ -1,21 +1,18 @@
 #EXTM3U
-#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/8dZOBwvS-hvzueWgo.png" group-title="Giờ Vàng TV" , 🟢 22:30 03/10 ⚽ MOUZ vs M80 (Mickey) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791004007_hd/1791004007_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/croatia.png" group-title="Giờ Vàng TV" , 🟢 23:00 03/10 ⚽ Croatia vs Anh (Mason) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/179106932744031076_hd/179106932744031076_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/iceland.png" group-title="Giờ Vàng TV" , 🟢 23:00 03/10 ⚽ Iceland vs Bulgaria (18) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/179106932744031078_hd/179106932744031078_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/belarus.png" group-title="Giờ Vàng TV" , 🟢 23:00 03/10 ⚽ Belarus vs San Marino (Béo) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791069327440310782_hd/1791069327440310782_hd@720p.m3u8
-
 #EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/0OsJt6Fa-CxYUcq3p.png" group-title="Giờ Vàng TV" , 🟢 23:00 03/10 🥊 Ben Whittaker vs Conor Wallace (Cây) [hls]
 https://ftlh5sc02iliv.vcdn.cloud/1791008020_hd/1791008020_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/russia.png" group-title="Giờ Vàng TV" , 🟢 22:00 03/10 ⚽ Nga vs Namibia (Điếc) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/17910641244687090601_hd/17910641244687090601_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/north-macedonia.png" group-title="Giờ Vàng TV" , 🟢 01:45 04/10 ⚽ Bắc Macedonia vs Scotland (sup) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/17910697742539555440950_hd/17910697742539555440950_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/spain.png" group-title="Giờ Vàng TV" , 🟢 01:45 04/10 ⚽ Tây Ban Nha vs Cộng hòa Séc (ngong) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/179106932744031076_hd/179106932744031076_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/canada.png" group-title="Giờ Vàng TV" , 🟢 01:00 04/10 ⚽ Canada vs Peru (Mù) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791069224468704070_hd/1791069224468704070_hd@720p.m3u8
 
 #EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/CMe9zXzS-QNrz0V5B.png" group-title="Giờ Vàng TV" , 🟢 00:00 04/10 ⚾ Cleverland Guardians vs Chicago White Sox (riko) [hls]
 https://ftlh5sc02iliv.vcdn.cloud/1791000722_hd/1791000722_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/prWwhLwS-dbN3tce0.png" group-title="Giờ Vàng TV" , 🟢 01:30 04/10 🏐 Vero Volley nữ vs Firenze nữ (Sun) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/179104823688_hd/179104823688_hd@720p.m3u8
