@@ -2,6 +2,13 @@ import re
 import time
 import requests
 
+# Tự động sử dụng cloudscraper nếu có để vượt tường lửa Cloudflare
+try:
+    import cloudscraper
+    HAS_CLOUDSCRAPER = True
+except ImportError:
+    HAS_CLOUDSCRAPER = False
+
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 DEFAULT_OFFLINE_STREAM = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
@@ -23,6 +30,15 @@ HEADERS = {
     "Referer": "https://giovang.rent/",
 }
 
+def create_http_session():
+    if HAS_CLOUDSCRAPER:
+        return cloudscraper.create_scraper(
+            browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+        )
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    return session
+
 def is_match_valid(match):
     status_code = str(match.get("status_code", "")).upper()
     status_text = str(match.get("status", "")).lower()
@@ -35,10 +51,11 @@ def is_match_valid(match):
 def fetch_matches():
     timestamp = int(time.time())
     url = f"{LIVE_API_URL}?t={timestamp}"
+    session = create_http_session()
 
     try:
-        response = requests.get(url, headers=HEADERS, timeout=12)
-        print(f"[DEBUG] HTTP Status Code API chính: {response.status_code}")
+        response = session.get(url, headers=HEADERS, timeout=12)
+        print(f"[DEBUG] HTTP Status API chính: {response.status_code}")
         
         if response.status_code == 200:
             res_json = response.json()
@@ -46,24 +63,21 @@ def fetch_matches():
             print(f"[DEBUG] Tổng số trận nhận từ API: {len(matches)}")
             return matches
         else:
-            print(f"[ERR] API trả về lỗi {response.status_code}. Phản hồi: {response.text[:200]}")
+            print(f"[ERR] API trả về lỗi {response.status_code}")
     except Exception as e:
         print(f"[ERR] Không thể kết nối tới API: {e}")
     return []
 
 def scrape_all_streams():
-    """
-    Tải trang chủ giovang.rent / giovang.co để lấy danh sách URL slug của từng trận,
-    sau đó truy cập từng trang để bóc tách link .m3u8 từ DPlayer.
-    """
     stream_map = {}
     match_page_urls = set()
+    session = create_http_session()
 
-    # 1. Quét trang chủ lấy tất cả các link xem trực tiếp
     domains = ["https://giovang.rent/", "https://giovang.co/"]
     for domain in domains:
         try:
-            res = requests.get(domain, headers=HEADERS, timeout=10)
+            res = session.get(domain, headers=HEADERS, timeout=10)
+            print(f"[DEBUG] Tải trang chủ {domain} - Status: {res.status_code}")
             if res.status_code == 200:
                 found_links = re.findall(r'href=["\'](https?://[^\s"\'\\]+truc-tiep-[^"\']+)["\']', res.text)
                 for link in found_links:
@@ -74,19 +88,19 @@ def scrape_all_streams():
                     match_page_urls.add(domain.rstrip('/') + rlink)
 
                 if match_page_urls:
-                    print(f"[DEBUG] Đã tìm thấy {len(match_page_urls)} trang trận đấu từ {domain}")
+                    print(f"[DEBUG] Đã tìm thấy {len(match_page_urls)} đường dẫn trận đấu từ {domain}")
                     break
         except Exception as e:
-            print(f"[DEBUG] Lỗi tải trang chủ {domain}: {e}")
+            print(f"[DEBUG] Lỗi tải {domain}: {e}")
 
-    # 2. Bóc tách link m3u8 từ từng trang trận đấu
+    # Bóc tách link .m3u8 trực tiếp từ từng trang trận đấu
     for page_url in match_page_urls:
         try:
-            res = requests.get(page_url, headers=HEADERS, timeout=8)
+            res = session.get(page_url, headers=HEADERS, timeout=8)
             if res.status_code == 200:
                 html_content = res.text
                 
-                # Tìm tất cả file .m3u8 trong HTML
+                # Quét tất cả link m3u8 (bao gồm cả vcdn.cloud)
                 m3u8_links = re.findall(r'https?://[^\s"\'\\]+\.m3u8[^\s"\'\\]*', html_content)
                 valid_m3u8s = []
                 for u in m3u8_links:
@@ -96,13 +110,8 @@ def scrape_all_streams():
                 valid_m3u8s = list(set(valid_m3u8s))
 
                 if valid_m3u8s:
-                    print(f"[DEBUG] Lấy thành công {len(valid_m3u8s)} link m3u8 từ: {page_url}")
+                    print(f"[SUCCESS] Lấy thành công {len(valid_m3u8s)} link stream từ {page_url}")
                     stream_map[page_url] = valid_m3u8s
-                    
-                    # Quét thêm ID trận nếu có trong JS của trang
-                    ids_in_html = re.findall(r'["\'](?:id|fi)["\']\s*:\s*["\']([a-zA-Z0-9]+)["\']', html_content)
-                    for mid in ids_in_html:
-                        stream_map[mid] = valid_m3u8s
         except Exception as e:
             print(f"[DEBUG] Lỗi cào trang {page_url}: {e}")
 
@@ -111,7 +120,7 @@ def scrape_all_streams():
 def generate_m3u():
     matches = fetch_matches()
     
-    print("[INFO] Đang quét các trang trận đấu để lấy luồng m3u8...")
+    print("[INFO] Đang dùng CloudScraper cào dữ liệu luồng m3u8...")
     stream_map, all_page_urls = scrape_all_streams()
 
     m3u_lines = ["#EXTM3U\n"]
@@ -149,26 +158,19 @@ def generate_m3u():
         status_code = str(match.get("status_code", "")).upper()
         status_symbol = "🟢 " if (is_live or status_code == "LIVE") else "🟡 "
 
-        # Khớp luồng stream
         stream_urls = []
         
-        # Thử tìm theo match_id
-        if match_id in stream_map:
-            stream_urls = stream_map[match_id]
+        # Tìm link m3u8 khớp với tên trận đấu
+        home_slug = home_name.lower().replace(" ", "-") if home_name else ""
+        away_slug = away_name.lower().replace(" ", "-") if away_name else ""
         
-        # Thử tìm theo tên đội bóng trong URL
-        if not stream_urls:
-            home_slug = home_name.lower().replace(" ", "-") if home_name else ""
-            away_slug = away_name.lower().replace(" ", "-") if away_name else ""
-            
-            for purl in all_page_urls:
-                purl_lower = purl.lower()
-                if (home_slug and home_slug in purl_lower) or (away_slug and away_slug in purl_lower):
-                    if purl in stream_map:
-                        stream_urls = stream_map[purl]
-                        break
+        for purl in all_page_urls:
+            purl_lower = purl.lower()
+            if (home_slug and home_slug in purl_lower) or (away_slug and away_slug in purl_lower):
+                if purl in stream_map:
+                    stream_urls = stream_map[purl]
+                    break
 
-        # Nếu chưa tới giờ phát sóng hoặc không cào được thì dùng fallback
         if not stream_urls:
             stream_urls = [DEFAULT_OFFLINE_STREAM]
 
