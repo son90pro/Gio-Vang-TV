@@ -1,8 +1,8 @@
 import re
 import time
+import unicodedata
 import requests
 
-# Tự động sử dụng cloudscraper nếu có để vượt tường lửa Cloudflare
 try:
     import cloudscraper
     HAS_CLOUDSCRAPER = True
@@ -25,10 +25,20 @@ SPORT_ICONS = {
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
     "Referer": "https://giovang.rent/",
 }
+
+def remove_accents(input_str):
+    """Chuyển tiếng Việt có dấu thành không dấu để khớp URL slug"""
+    if not input_str:
+        return ""
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    no_accent = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    no_accent = no_accent.replace('đ', 'd').replace('Đ', 'D')
+    clean_str = re.sub(r'[^a-zA-Z0-9\s-]', '', no_accent).lower()
+    return re.sub(r'[\s-]+', '-', clean_str).strip('-')
 
 def create_http_session():
     if HAS_CLOUDSCRAPER:
@@ -62,8 +72,6 @@ def fetch_matches():
             matches = res_json.get("response", [])
             print(f"[DEBUG] Tổng số trận nhận từ API: {len(matches)}")
             return matches
-        else:
-            print(f"[ERR] API trả về lỗi {response.status_code}")
     except Exception as e:
         print(f"[ERR] Không thể kết nối tới API: {e}")
     return []
@@ -79,13 +87,19 @@ def scrape_all_streams():
             res = session.get(domain, headers=HEADERS, timeout=10)
             print(f"[DEBUG] Tải trang chủ {domain} - Status: {res.status_code}")
             if res.status_code == 200:
-                found_links = re.findall(r'href=["\'](https?://[^\s"\'\\]+truc-tiep-[^"\']+)["\']', res.text)
-                for link in found_links:
-                    match_page_urls.add(link)
+                html = res.text
                 
-                rel_links = re.findall(r'href=["\'](/truc-tiep-[^"\']+)["\']', res.text)
-                for rlink in rel_links:
-                    match_page_urls.add(domain.rstrip('/') + rlink)
+                # Quét tất cả đường dẫn dạng /truc-tiep... kể cả trong JS/JSON
+                raw_paths = re.findall(r'["\'](/truc-tiep[^\s"\'\\]*)["\']', html)
+                raw_urls = re.findall(r'["\'](https?://[^\s"\'\\]+truc-tiep[^\s"\'\\]*)["\']', html)
+                
+                for path in raw_paths:
+                    clean_path = path.replace("\\/", "/")
+                    match_page_urls.add(domain.rstrip('/') + clean_path)
+                    
+                for url in raw_urls:
+                    clean_url = url.replace("\\/", "/")
+                    match_page_urls.add(clean_url)
 
                 if match_page_urls:
                     print(f"[DEBUG] Đã tìm thấy {len(match_page_urls)} đường dẫn trận đấu từ {domain}")
@@ -100,18 +114,18 @@ def scrape_all_streams():
             if res.status_code == 200:
                 html_content = res.text
                 
-                # Quét tất cả link m3u8 (bao gồm cả vcdn.cloud)
+                # Tìm tất cả link .m3u8 trong HTML/JS của trang
                 m3u8_links = re.findall(r'https?://[^\s"\'\\]+\.m3u8[^\s"\'\\]*', html_content)
                 valid_m3u8s = []
                 for u in m3u8_links:
-                    clean_u = u.replace("\\/", "/")
+                    clean_u = u.replace("\\/", "/").replace("\\u002F", "/").replace("\\u002f", "/")
                     if "no-signal" not in clean_u and "freem3u" not in clean_u:
                         valid_m3u8s.append(clean_u)
                 valid_m3u8s = list(set(valid_m3u8s))
 
                 if valid_m3u8s:
-                    print(f"[SUCCESS] Lấy thành công {len(valid_m3u8s)} link stream từ {page_url}")
-                    stream_map[page_url] = valid_m3u8s
+                    print(f"[SUCCESS] Lấy thành công {len(valid_m3u8s)} link stream từ: {page_url}")
+                    stream_map[page_url.lower()] = valid_m3u8s
         except Exception as e:
             print(f"[DEBUG] Lỗi cào trang {page_url}: {e}")
 
@@ -130,7 +144,6 @@ def generate_m3u():
         if not is_match_valid(match):
             continue
 
-        match_id = match.get("fi") or match.get("id", "")
         sport_type = str(match.get("type", "football")).lower()
         icon = SPORT_ICONS.get(sport_type, "⚽")
 
@@ -160,15 +173,17 @@ def generate_m3u():
 
         stream_urls = []
         
-        # Tìm link m3u8 khớp với tên trận đấu
-        home_slug = home_name.lower().replace(" ", "-") if home_name else ""
-        away_slug = away_name.lower().replace(" ", "-") if away_name else ""
+        # Chuyển tên đội sang slug không dấu để so sánh
+        home_slug = remove_accents(home_name)
+        away_slug = remove_accents(away_name)
         
         for purl in all_page_urls:
             purl_lower = purl.lower()
-            if (home_slug and home_slug in purl_lower) or (away_slug and away_slug in purl_lower):
-                if purl in stream_map:
-                    stream_urls = stream_map[purl]
+            # Khớp nếu tên 1 trong 2 đội xuất hiện trong URL trang web
+            if (home_slug and len(home_slug) > 2 and home_slug in purl_lower) or \
+               (away_slug and len(away_slug) > 2 and away_slug in purl_lower):
+                if purl_lower in stream_map:
+                    stream_urls = stream_map[purl_lower]
                     break
 
         if not stream_urls:
