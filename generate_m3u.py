@@ -12,7 +12,7 @@ except ImportError:
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 DEFAULT_OFFLINE_STREAM = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
-# 2 Server CDN chính thức của Giờ Vàng
+# 2 Server CDN chuẩn của Giờ Vàng
 CDN_SERVERS = [
     "https://ftlh5sc02iliv.vcdn.cloud",
     "https://pzhgifbkllliv.vcdn.cloud"
@@ -29,14 +29,13 @@ SPORT_ICONS = {
 }
 
 REFERER_URL = "https://giovang.rent/"
-ORIGIN_URL = "https://giovang.rent"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
 HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept": "application/json, text/plain, */*",
     "Referer": REFERER_URL,
-    "Origin": ORIGIN_URL
+    "Origin": "https://giovang.rent"
 }
 
 def create_http_session():
@@ -72,7 +71,7 @@ def is_match_valid(match):
     return True
 
 def extract_real_room_id(match):
-    """Lọc chính xác duy nhất room_id live stream dạng 10 chữ số"""
+    """Bóc tách chính xác room_id dạng 10 chữ số (đầu 17)"""
     for key in ["room_id", "bitrate_id", "stream_id", "room"]:
         val = match.get(key)
         if val is not None:
@@ -80,17 +79,6 @@ def extract_real_room_id(match):
             if sval.isdigit() and len(sval) >= 8:
                 return sval
 
-    bitrate = match.get("bitrate") or match.get("bitrates")
-    if isinstance(bitrate, list) and bitrate:
-        for b in bitrate:
-            if isinstance(b, dict):
-                rid = b.get("room_id") or b.get("id")
-                if rid and str(rid).isdigit() and len(str(rid)) >= 8:
-                    return str(rid)
-            elif isinstance(b, str) and b.isdigit() and len(b) >= 8:
-                return b
-
-    # Tìm mã ID 10 chữ số đầu 17 đặc trưng của Giờ Vàng
     match_str = json.dumps(match)
     found_ids = re.findall(r'\b17\d{8}\b', match_str)
     if found_ids:
@@ -99,21 +87,13 @@ def extract_real_room_id(match):
     return None
 
 def extract_stream_urls(match):
-    """Tạo đường dẫn stream chuẩn xác"""
     urls = []
-    match_str = json.dumps(match)
-
-    direct_m3u8 = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
-    for link in direct_m3u8:
-        if "no-signal" not in link and "vcdn.cloud" in link:
-            urls.append(link)
-
     room_id = extract_real_room_id(match)
+    
     if room_id:
         for cdn in CDN_SERVERS:
             urls.append(f"{cdn}/{room_id}_hd/{room_id}_hd@720p.m3u8")
 
-    urls = list(dict.fromkeys(urls))
     return urls if urls else [DEFAULT_OFFLINE_STREAM]
 
 def fetch_matches():
@@ -132,16 +112,8 @@ def fetch_matches():
 
 def generate_m3u():
     matches = fetch_matches()
-    m3u_lines = ["#EXTM3U\n"]
+    m3u_lines = ["#EXTM3U"]
     count_added = 0
-
-    ext_http_json = json.dumps({
-        "headers": {
-            "Referer": REFERER_URL,
-            "User-Agent": USER_AGENT,
-            "Origin": ORIGIN_URL
-        }
-    })
 
     for match in matches:
         if not is_match_valid(match):
@@ -195,24 +167,20 @@ def generate_m3u():
             server_label = f" - Sv{idx + 1}" if len(stream_urls) > 1 else ""
             title = f"{base_title}{server_label}"
 
+            # Dòng 1: Cấu trúc #EXTINF chuẩn truyền thống
             m3u_lines.append(
                 f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" '
-                f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}" , {title}'
+                f'http-referrer="{REFERER_URL}" http-user-agent="{USER_AGENT}", {title}'
             )
-            m3u_lines.append(f'#EXTHTTP:{ext_http_json}')
-            m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
-            m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
-
-            final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}"
-            m3u_lines.append(final_url)
-            m3u_lines.append("")
+            # Dòng 2: Link stream sạch (URL nguyên bản không chứa pipe |)
+            m3u_lines.append(stream_url)
 
         count_added += 1
 
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Đã cập nhật thành công {count_added} trận vào giovang.m3u")
+    print(f"Đã cập nhật thành công {count_added} trận vào giovang.m3u (Format Chuẩn 2 Dòng)")
 
 if __name__ == "__main__":
     generate_m3u()
