@@ -11,6 +11,7 @@ except ImportError:
 
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 DEFAULT_OFFLINE_STREAM = "https://freem3u.xyz/static/no-signal/low.m3u8"
+PRIMARY_CDN = "https://ftlh5sc02iliv.vcdn.cloud"
 
 SPORT_ICONS = {
     "football": "⚽", "bongda": "⚽",
@@ -19,7 +20,8 @@ SPORT_ICONS = {
     "tennis": "🥎",
     "vothuat": "🥊🥋", "boxing": "🥊🥋", "mma": "🥊🥋",
     "esports": "🎮", "game": "🎮",
-    "f1": "[formula1]", "formula1": "[formula1]", "racing": "[formula1]"
+    "f1": "[formula1]", "formula1": "[formula1]", "racing": "[formula1]",
+    "baseball": "⚾", "bongchay": "⚾"
 }
 
 HEADERS = {
@@ -44,16 +46,28 @@ def clean_blv_name(blv_raw):
             name = str(blv_raw[0].get("name") or blv_raw[0].get("nickname") or "BLV")
         else:
             name = str(blv_raw[0])
+    elif isinstance(blv_raw, dict):
+        name = str(blv_raw.get("name") or blv_raw.get("nickname") or "BLV")
     else:
         name = str(blv_raw or "BLV")
 
-    name = re.sub(r'^(blv[-_]?|BLV[-_]?)', '', name, flags=re.IGNORECASE).strip()
+    raw_strip = name.strip()
+    raw_lower = raw_strip.lower()
+    
     blv_map = {
         "diec": "Điếc", "vit": "Vịt", "bon": "Bốn", "tri": "Trí",
-        "tom": "Tôm", "cay": "Cây", "sun": "Sun", "ben": "Bên",
-        "ngu": "Ngơ", "tuimu": "Túi Mù", "beo": "Béo", "mason": "Mason", "mickey": "Mickey"
+        "tom": "Tôm", "cay": "Cây", "cầy": "Cầy", "sun": "Sun", "ben": "Bên",
+        "ngu": "Ngơ", "tuimu": "Túi Mù", "beo": "Béo", "mason": "Mason", "mickey": "Mickey",
+        "dory": "Dory", "bee": "Bee", "riko": "riko"
     }
-    return blv_map.get(name.lower(), name.capitalize())
+
+    clean_key = re.sub(r'^(blv[-_]?|BLV[-_]?)', '', raw_lower).strip()
+    if clean_key in blv_map:
+        return blv_map[clean_key]
+    if raw_lower in blv_map:
+        return blv_map[raw_lower]
+
+    return raw_strip
 
 def is_match_valid(match):
     status_code = str(match.get("status_code", "")).upper()
@@ -64,37 +78,36 @@ def is_match_valid(match):
         return False
     return True
 
-def recursive_find_m3u8(data):
-    """Tìm kiếm tất cả các URL chứa .m3u8 hoặc link stream trong toàn bộ cấu trúc JSON"""
-    urls = []
-    if isinstance(data, dict):
-        for k, v in data.items():
-            urls.extend(recursive_find_m3u8(v))
-    elif isinstance(data, list):
-        for item in data:
-            urls.extend(recursive_find_m3u8(item))
-    elif isinstance(data, str):
-        if data.startswith("http") and (".m3u8" in data or "vcdn" in data or "stream" in data or "hls" in data):
-            urls.append(data)
-    return urls
-
 def extract_stream_url(match):
-    # 1. Tìm kiếm đệ quy toàn bộ link m3u8 có trong match
-    found_urls = recursive_find_m3u8(match)
-    if found_urls:
-        return found_urls[0]
+    is_live = match.get("is_live", False)
+    status_code = str(match.get("status_code", "")).upper()
 
-    # 2. Quét chuỗi JSON tìm link m3u8 bằng Regex
-    match_str = json.dumps(match)
-    direct_m3u8 = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
-    if direct_m3u8:
-        return direct_m3u8[0]
+    # Quy tắc cốt lõi: Chỉ trận ĐANG LIVE mới có link stream VCDN, trận chưa live dùng link offline
+    if not (is_live or status_code == "LIVE"):
+        return DEFAULT_OFFLINE_STREAM
 
-    # 3. Quét tìm URL bất kỳ bắt đầu bằng http(s)
-    all_http_urls = re.findall(r'https?://[^\s"]+', match_str)
-    for url in all_http_urls:
-        if not any(ext in url for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]):
-            return url
+    # Lấy ID trận đấu
+    raw_id = None
+    for key in ["bitrate_id", "room_id", "stream_id", "channel_id", "room", "bitrate", "id"]:
+        val = match.get(key)
+        if val is not None:
+            sval = str(val).strip()
+            # Bỏ qua mốc giờ tròn (timestamp kết thúc bằng 00)
+            if sval and not (len(sval) == 10 and sval.endswith("00")):
+                raw_id = sval
+                break
+
+    if raw_id:
+        # Nếu đã là ID 10 số hoàn chỉnh
+        if len(raw_id) == 10 and raw_id.isdigit():
+            return f"{PRIMARY_CDN}/{raw_id}_hd/{raw_id}_hd@720p.m3u8"
+
+        # Nếu là ID ngắn (1-5 số), ghép prefix timestamp 5 số + ID zfill 5 chữ số
+        if raw_id.isdigit():
+            ts = str(match.get("timestamp") or match.get("time_stamp") or match.get("start_time") or int(time.time())).strip()
+            prefix = ts[:5] if len(ts) >= 5 else "17910"
+            full_room = f"{prefix}{raw_id.zfill(5)}"
+            return f"{PRIMARY_CDN}/{full_room}_hd/{full_room}_hd@720p.m3u8"
 
     return DEFAULT_OFFLINE_STREAM
 
@@ -117,11 +130,6 @@ def generate_m3u():
     m3u_lines = ["#EXTM3U"]
     count_added = 0
 
-    if matches:
-        print("\n================ DATA MATCH MAU GIOC ===============")
-        print(json.dumps(matches[0], ensure_ascii=False, indent=2))
-        print("===================================================\n")
-
     for match in matches:
         if not is_match_valid(match):
             continue
@@ -135,6 +143,8 @@ def generate_m3u():
             icon = "[formula1]"
         elif any(k in sport_type or k in league_name for k in ["esports", "game", "lol", "csgo", "dota"]):
             icon = "🎮"
+        elif any(k in sport_type or k in league_name for k in ["baseball", "bongchay"]):
+            icon = "⚾"
         else:
             icon = SPORT_ICONS.get(sport_type, "⚽")
 
@@ -163,7 +173,7 @@ def generate_m3u():
 
         if is_live or status_code == "LIVE":
             status_symbol = "🟢 "
-        elif status_code in ["UPCOMING", "WAITING"]:
+        elif status_code in ["WAITING"]:
             status_symbol = "🟡 "
         else:
             status_symbol = ""
