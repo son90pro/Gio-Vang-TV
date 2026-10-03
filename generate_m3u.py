@@ -12,7 +12,7 @@ except ImportError:
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 DEFAULT_OFFLINE_STREAM = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
-# Danh sách 2 CDN Server chạy song song của Giờ Vàng
+# 2 Server CDN chính thức của Giờ Vàng
 CDN_SERVERS = [
     "https://ftlh5sc02iliv.vcdn.cloud",
     "https://pzhgifbkllliv.vcdn.cloud"
@@ -71,36 +71,47 @@ def is_match_valid(match):
         return False
     return True
 
-def extract_stream_urls(match):
-    """Trích xuất link stream chuẩn dựa trên ID/Timestamp trận đấu"""
-    urls = []
-    match_str = json.dumps(match)
-    
-    # 1. Tìm trực tiếp nếu JSON chứa link .m3u8 thật
-    m3u8_matches = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
-    for link in m3u8_matches:
-        if "no-signal" not in link and "http" in link:
-            urls.append(link)
-
-    # 2. Bóc tách ID trận đấu/phòng live
-    candidate_ids = []
-    for key in ["room_id", "stream_id", "id", "bitrate_id", "code", "timestamp"]:
+def extract_real_room_id(match):
+    """Lọc chính xác duy nhất room_id live stream dạng 10 chữ số"""
+    for key in ["room_id", "bitrate_id", "stream_id", "room"]:
         val = match.get(key)
         if val is not None:
             sval = str(val).strip()
-            if sval.isdigit() and len(sval) >= 5:
-                candidate_ids.append(sval)
+            if sval.isdigit() and len(sval) >= 8:
+                return sval
 
-    if not candidate_ids:
-        found_nums = re.findall(r'\b\d{8,11}\b', match_str)
-        candidate_ids.extend(found_nums)
+    bitrate = match.get("bitrate") or match.get("bitrates")
+    if isinstance(bitrate, list) and bitrate:
+        for b in bitrate:
+            if isinstance(b, dict):
+                rid = b.get("room_id") or b.get("id")
+                if rid and str(rid).isdigit() and len(str(rid)) >= 8:
+                    return str(rid)
+            elif isinstance(b, str) and b.isdigit() and len(b) >= 8:
+                return b
 
-    candidate_ids = list(dict.fromkeys(candidate_ids))
+    # Tìm mã ID 10 chữ số đầu 17 đặc trưng của Giờ Vàng
+    match_str = json.dumps(match)
+    found_ids = re.findall(r'\b17\d{8}\b', match_str)
+    if found_ids:
+        return found_ids[0]
 
-    # Ghép ID tìm được vào cả 2 Server CDN
-    for cid in candidate_ids:
+    return None
+
+def extract_stream_urls(match):
+    """Tạo đường dẫn stream chuẩn xác"""
+    urls = []
+    match_str = json.dumps(match)
+
+    direct_m3u8 = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', match_str)
+    for link in direct_m3u8:
+        if "no-signal" not in link and "vcdn.cloud" in link:
+            urls.append(link)
+
+    room_id = extract_real_room_id(match)
+    if room_id:
         for cdn in CDN_SERVERS:
-            urls.append(f"{cdn}/{cid}_hd/{cid}_hd@720p.m3u8")
+            urls.append(f"{cdn}/{room_id}_hd/{room_id}_hd@720p.m3u8")
 
     urls = list(dict.fromkeys(urls))
     return urls if urls else [DEFAULT_OFFLINE_STREAM]
@@ -140,7 +151,7 @@ def generate_m3u():
 
         sport_type = str(match.get("type", "football")).lower()
         league_name = str(match.get("league", {}).get("name", "")).lower()
-        
+
         if any(k in league_name for k in ["f1", "formula", "grand prix", "racing"]):
             icon = "[formula1]"
         elif any(k in sport_type or k in league_name for k in ["esports", "game", "lol", "csgo", "dota"]):
@@ -191,11 +202,11 @@ def generate_m3u():
             m3u_lines.append(f'#EXTHTTP:{ext_http_json}')
             m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
             m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
-            
+
             final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}"
             m3u_lines.append(final_url)
             m3u_lines.append("")
-        
+
         count_added += 1
 
     with open("giovang.m3u", "w", encoding="utf-8") as f:
