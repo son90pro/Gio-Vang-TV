@@ -65,42 +65,54 @@ def is_match_valid(match):
         return False
     return True
 
-def find_m3u8_recursive(data):
-    """Tìm kiếm tất cả các đường dẫn .m3u8 trong cấu trúc JSON phức tạp"""
-    found_urls = []
+def find_urls_and_ids(data):
+    """Quét đệ quy tìm tất cả link .m3u8 và ID phòng live bất kỳ"""
+    urls = []
+    ids = []
+
     if isinstance(data, dict):
-        for k, v in data.items():
-            found_urls.extend(find_m3u8_recursive(v))
+        for k in ["room_id", "stream_id", "bitrate_id", "id", "code"]:
+            val = data.get(k)
+            if val is not None:
+                sval = str(val).strip()
+                if sval.isdigit() and 5 <= len(sval) <= 11:
+                    # Bỏ qua mốc thời gian Unix timestamp kết thúc bằng 00 hoặc 000
+                    if not (len(sval) == 10 and (sval.endswith("00") or sval.endswith("000"))):
+                        ids.append(sval)
+
+        for v in data.values():
+            u, i = find_urls_and_ids(v)
+            urls.extend(u)
+            ids.extend(i)
+
     elif isinstance(data, list):
         for item in data:
-            found_urls.extend(find_m3u8_recursive(item))
+            u, i = find_urls_and_ids(item)
+            urls.extend(u)
+            ids.extend(i)
+
     elif isinstance(data, str):
         if ".m3u8" in data:
-            urls = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', data)
-            found_urls.extend(urls)
-    return found_urls
+            found = re.findall(r'https?://[^\s"]+\.m3u8[^\s"]*', data)
+            urls.extend(found)
+        found_nums = re.findall(r'\b\d{6,10}\b', data)
+        for n in found_nums:
+            if not (len(n) == 10 and (n.endswith("00") or n.endswith("000"))):
+                ids.append(n)
+
+    return list(dict.fromkeys(urls)), list(dict.fromkeys(ids))
 
 def extract_real_stream_url(match):
-    """Trích xuất link stream chính xác nhất từ match object"""
-    # 1. Quét tìm toàn bộ link .m3u8 thật trong JSON
-    m3u8_list = find_m3u8_recursive(match)
-    for link in m3u8_list:
-        if "no-signal" not in link and "http" in link:
-            return link
+    urls, ids = find_urls_and_ids(match)
 
-    # 2. Nếu không có m3u8 trực tiếp, tìm ID phòng để ghép link VCDN
-    match_str = json.dumps(match)
-    room_id = match.get("room_id") or match.get("stream_id") or match.get("bitrate_id")
-    
-    if not room_id:
-        ids = re.findall(r'\b(17\d{7,8})\b', match_str)
-        for sid in ids:
-            if not (sid.endswith("00") or sid.endswith("000")):
-                room_id = sid
-                break
+    # 1. Ưu tiên lấy trực tiếp link .m3u8 từ API nếu có
+    for u in urls:
+        if "no-signal" not in u and "http" in u:
+            return u
 
-    if room_id:
-        return f"https://ftlh5sc02iliv.vcdn.cloud/{room_id}_hd/{room_id}_hd@720p.m3u8"
+    # 2. Ghép ID phòng live bất kỳ tìm được vào CDN VCDN
+    for sid in ids:
+        return f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8"
 
     return DEFAULT_OFFLINE_STREAM
 
@@ -187,8 +199,7 @@ def generate_m3u():
         m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
         m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
         
-        # Chỉ truyền duy nhất tham số Referer qua Pipe để tránh ExoPlayer bị xung đột
-        final_url = f"{stream_url}|Referer={REFERER_URL}"
+        final_url = f"{stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}"
         m3u_lines.append(final_url)
         m3u_lines.append("")
         
