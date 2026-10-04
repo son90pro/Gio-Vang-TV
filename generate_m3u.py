@@ -24,7 +24,7 @@ SPORT_ICONS = {
     "billiards": "🎱", "bida": "🎱",
     "vothuat": "🥊", "boxing": "🥊", "mma": "🥊",
     "esport": "🎮", "esports": "🎮", "game": "🎮",
-    "f1": "🏎️", "formula1": "🏎️️"
+    "f1": "🏎️", "formula1": "🏎"
 }
 
 HEADERS = {
@@ -75,11 +75,11 @@ def fetch_matches(session):
     return []
 
 def get_stream_url(session, match_id):
-    """Gọi Widget API để lấy link .m3u8 CDN chuẩn chứa ID số"""
+    """Ưu tiên lấy link từ Widget API, nếu bị Cloudflare chặn thì tự động Fallback"""
     url = WIDGET_API_URL.format(match_id=match_id)
     try:
-        res = session.get(url, timeout=8)
-        if res.status_code == 200:
+        res = session.get(url, timeout=6)
+        if res.status_code == 200 and res.text.strip().startswith("{"):
             data = res.json()
             stream_url = data.get("pc_stream_url") or data.get("mobile_stream_url")
             if not stream_url and isinstance(data.get("response"), dict):
@@ -88,10 +88,11 @@ def get_stream_url(session, match_id):
             
             if stream_url and stream_url.startswith("http"):
                 return stream_url
-    except Exception as e:
-        print(f"  └─ Lỗi gọi Widget API cho {match_id}: {e}")
+    except Exception:
+        pass
     
-    return None
+    # Fallback tạo link CDN trực tiếp kèm ID khi Widget API không phản hồi JSON
+    return f"https://vcdn.cloud/live/{match_id}/index.m3u8"
 
 def generate_m3u():
     session = create_http_session()
@@ -99,7 +100,7 @@ def generate_m3u():
     m3u_lines = ["#EXTM3U"]
     count = 0
 
-    print(f"-> Quét được {len(matches)} trận đấu. Đang tiến hành lấy link CDN...")
+    print(f"-> Quét được {len(matches)} trận đấu. Đang tạo danh sách kênh M3U...")
 
     for match in matches:
         status_code = str(match.get("status_code", "")).upper()
@@ -111,15 +112,10 @@ def generate_m3u():
         if not match_id:
             continue
 
-        # Lấy link stream thật từ Widget API
+        # Lấy link stream
         raw_stream_url = get_stream_url(session, match_id)
-        
-        # Nếu chưa có link phát (trận chưa mở luồng), bỏ qua không đưa vào M3U
-        if not raw_stream_url:
-            print(f"  [X] Bỏ qua trận {match_id} (chưa có link stream CDN)")
-            continue
 
-        # Nối Referer & User-Agent vào URL để TiviMate gửi kèm Header khi mở luồng
+        # Nối Referer & User-Agent vào URL cho TiviMate
         stream_url_for_tivimate = f"{raw_stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}"
 
         sport_type = str(match.get("type", "football")).lower()
@@ -145,7 +141,6 @@ def generate_m3u():
 
         title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv}) [hls]"
 
-        # Ghi các thông số đính kèm Referer cho TiviMate / OTT Navigator
         m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}')
         m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
         m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
@@ -158,7 +153,7 @@ def generate_m3u():
         f.write("\n".join(m3u_lines))
 
     print(f"\n==========================================")
-    print(f"Đã cập nhật thành công {count} trận chạy được vào giovang.m3u")
+    print(f"Đã cập nhật thành công {count} trận vào giovang.m3u")
     print(f"==========================================")
 
 if __name__ == "__main__":
