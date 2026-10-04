@@ -11,16 +11,17 @@ except ImportError:
 
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 PRIMARY_CDN = "https://ftlh5sc02iliv.vcdn.cloud"
-DEFAULT_OFFLINE = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 SPORT_ICONS = {
     "football": "⚽", "bongda": "⚽",
     "basketball": "🏀", "bongro": "🏀",
-    "bongchuyen": "🏐", "tennis": "🥎",
+    "bongchuyen": "🏐",
+    "bongban": "🏓",
+    "tennis": "🎾",
+    "billiards": "🎱", "bida": "🎱",
     "vothuat": "🥊", "boxing": "🥊", "mma": "🥊",
-    "esports": "🎮", "game": "🎮",
-    "f1": "[formula1]", "formula1": "[formula1]",
-    "baseball": "⚾", "bongchay": "⚾"
+    "esport": "🎮", "esports": "🎮", "game": "🎮",
+    "f1": "[formula1]", "formula1": "[formula1]"
 }
 
 HEADERS = {
@@ -39,52 +40,22 @@ def create_http_session():
 
 def clean_blv_name(blv_raw):
     if isinstance(blv_raw, list) and blv_raw:
-        item = blv_raw[0]
-        name = item.get("name") or item.get("nickname") if isinstance(item, dict) else str(item)
-    elif isinstance(blv_raw, dict):
-        name = blv_raw.get("name") or blv_raw.get("nickname")
+        raw = str(blv_raw[0])
     else:
-        name = str(blv_raw or "")
+        raw = str(blv_raw or "")
 
-    if not name:
-        return "BLV"
-
-    raw_strip = name.strip()
-    clean_key = re.sub(r'^(blv[-_]?|BLV[-_]?)', '', raw_strip, flags=re.IGNORECASE).strip()
+    clean = re.sub(r'^(blv[-_]?|BLV[-_]?)', '', raw, flags=re.IGNORECASE).strip()
     
     blv_map = {
-        "diec": "Điếc", "vit": "Vịt", "bon": "Bốn", "tri": "Trí",
-        "tom": "Tôm", "cay": "Cây", "cầy": "Cầy", "sun": "Sun", "ben": "Bên",
-        "ngu": "Ngơ", "tuimu": "Túi Mù", "beo": "Béo", "mason": "Mason", "mickey": "Mickey",
-        "dory": "Dory", "bee": "Bee", "riko": "riko", "sup": "sup", "ngong": "ngong", "can": "can"
+        "vit": "Vịt", "sun": "Sun", "sup": "Sup", "ben": "Bên",
+        "hau": "Hậu", "diec": "Điếc", "bon": "Bốn", "tri": "Trí",
+        "tom": "Tôm", "cay": "Cây", "cầy": "Cầy", "ngu": "Ngơ",
+        "tuimu": "Túi Mù", "beo": "Béo", "mason": "Mason", "mickey": "Mickey"
     }
     
-    return blv_map.get(clean_key.lower(), clean_key.capitalize() if clean_key else raw_strip)
-
-def get_exact_stream_url(match):
-    # 1. Nếu API có sẵn thuộc tính chứa link m3u8 trực tiếp
-    for key in ["link_m3u8", "stream_url", "m3u8", "play_url", "link"]:
-        val = match.get(key)
-        if isinstance(val, str) and ".m3u8" in val:
-            return val.strip()
-
-    # 2. Lấy bitrate_id / room_id / id để tạo link CDN chuẩn
-    raw_id = match.get("bitrate_id") or match.get("room_id") or match.get("id")
-    if raw_id:
-        s_id = str(raw_id).strip()
-        digits = re.sub(r'\D', '', s_id)
-        if digits:
-            if len(digits) == 10 and digits.startswith("17"):
-                return f"{PRIMARY_CDN}/{digits}_hd/{digits}_hd@720p.m3u8"
-            
-            ts = str(match.get("timestamp") or match.get("start_time") or match.get("time_stamp") or int(time.time())).strip()
-            ts_digits = re.sub(r'\D', '', ts)
-            prefix = ts_digits[:5] if len(ts_digits) >= 5 else "17910"
-            
-            full_id = f"{prefix}{digits.zfill(5)}"
-            return f"{PRIMARY_CDN}/{full_id}_hd/{full_id}_hd@720p.m3u8"
-
-    return DEFAULT_OFFLINE
+    if clean.lower() in blv_map:
+        return blv_map[clean.lower()]
+    return clean.capitalize() if clean else "BLV"
 
 def fetch_matches():
     timestamp = int(time.time())
@@ -95,10 +66,7 @@ def fetch_matches():
         response = session.get(url, headers=HEADERS, timeout=12)
         if response.status_code == 200:
             res_json = response.json()
-            if isinstance(res_json, dict):
-                return res_json.get("response", []) or res_json.get("data", [])
-            elif isinstance(res_json, list):
-                return res_json
+            return res_json.get("response", [])
     except Exception as e:
         print(f"[ERR] API: {e}")
     return []
@@ -114,17 +82,15 @@ def generate_m3u():
         if status_code in ["FINISHED", "FT", "ENDED", "CANCELLED"] or "kết thúc" in status_text:
             continue
 
-        stream_url = get_exact_stream_url(match)
+        match_id = match.get("id") or match.get("fi")
+        if not match_id:
+            continue
+
+        # Giữ nguyên ID gốc của API (ví dụ: njzlpe07h95m) ghép trực tiếp vào CDN
+        stream_url = f"{PRIMARY_CDN}/{match_id}_hd/{match_id}_hd@720p.m3u8"
 
         sport_type = str(match.get("type", "football")).lower()
-        league_name = str(match.get("league", {}).get("name", "")).lower()
-
-        if "f1" in league_name or "racing" in league_name:
-            icon = "[formula1]"
-        elif any(k in sport_type or k in league_name for k in ["esports", "game", "lol"]):
-            icon = "🎮"
-        else:
-            icon = SPORT_ICONS.get(sport_type, "⚽")
+        icon = SPORT_ICONS.get(sport_type, "⚽")
 
         time_str = str(match.get("time", "00:00"))[:5]
         day_month = match.get("day_month", "")
@@ -154,7 +120,7 @@ def generate_m3u():
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Đã cập nhật {count} trận vào giovang.m3u")
+    print(f"Đã cập nhật thành công {count} trận vào giovang.m3u")
 
 if __name__ == "__main__":
     generate_m3u()
