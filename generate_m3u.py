@@ -31,7 +31,10 @@ HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept": "application/json, text/plain, */*",
     "Referer": REFERER_URL,
-    "Origin": "https://giovang.rent"
+    "Origin": "https://giovang.rent",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "cross-site"
 }
 
 def create_http_session():
@@ -54,7 +57,7 @@ def clean_blv_name(blv_raw):
         "vit": "Vịt", "sun": "Sun", "sup": "Sup", "ben": "Bên",
         "hau": "Hậu", "diec": "Điếc", "bon": "Bốn", "tri": "Trí",
         "tom": "Tôm", "cay": "Cây", "cầy": "Cầy", "ngu": "Ngơ",
-        "tuimu": "Túi Mù", "beo": "Béo", "mason": "Mason", "mickey": "Mickey"
+        "tuimu": "Túi Mù", "beo": "Béo", "mason": "Mason", "mickey": "Mickey", "riko": "Riko"
     }
     
     if clean.lower() in blv_map:
@@ -75,24 +78,32 @@ def fetch_matches(session):
     return []
 
 def get_stream_url(session, match_id):
-    """Ưu tiên lấy link từ Widget API, nếu bị Cloudflare chặn thì tự động Fallback"""
-    url = WIDGET_API_URL.format(match_id=match_id)
-    try:
-        res = session.get(url, timeout=6)
-        if res.status_code == 200 and res.text.strip().startswith("{"):
-            data = res.json()
-            stream_url = data.get("pc_stream_url") or data.get("mobile_stream_url")
-            if not stream_url and isinstance(data.get("response"), dict):
-                resp = data.get("response", {})
-                stream_url = resp.get("pc_stream_url") or resp.get("mobile_stream_url")
-            
-            if stream_url and stream_url.startswith("http"):
-                return stream_url
-    except Exception:
-        pass
+    """Gọi Widget API kèm proxy dự phòng để vượt rào Cloudflare trên GitHub Actions"""
+    target_url = WIDGET_API_URL.format(match_id=match_id)
     
-    # Fallback tạo link CDN trực tiếp kèm ID khi Widget API không phản hồi JSON
-    return f"https://vcdn.cloud/live/{match_id}/index.m3u8"
+    # Danh sách thử nghiệm: Trực tiếp -> Proxy 1 -> Proxy 2
+    urls_to_try = [
+        target_url,
+        f"https://corsproxy.io/?{target_url}",
+        f"https://api.allorigins.win/raw?url={target_url}"
+    ]
+
+    for url in urls_to_try:
+        try:
+            res = session.get(url, timeout=8)
+            if res.status_code == 200 and res.text.strip().startswith("{"):
+                data = res.json()
+                stream_url = data.get("pc_stream_url") or data.get("mobile_stream_url")
+                if not stream_url and isinstance(data.get("response"), dict):
+                    resp = data.get("response", {})
+                    stream_url = resp.get("pc_stream_url") or resp.get("mobile_stream_url")
+                
+                if stream_url and stream_url.startswith("http"):
+                    return stream_url
+        except Exception:
+            continue
+    
+    return None
 
 def generate_m3u():
     session = create_http_session()
@@ -100,7 +111,7 @@ def generate_m3u():
     m3u_lines = ["#EXTM3U"]
     count = 0
 
-    print(f"-> Quét được {len(matches)} trận đấu. Đang tạo danh sách kênh M3U...")
+    print(f"-> Quét được {len(matches)} trận đấu. Đang tiến hành lấy link luồng phát CDN...")
 
     for match in matches:
         status_code = str(match.get("status_code", "")).upper()
@@ -112,10 +123,15 @@ def generate_m3u():
         if not match_id:
             continue
 
-        # Lấy link stream
+        # Lấy link stream chuẩn từ Widget API
         raw_stream_url = get_stream_url(session, match_id)
+        
+        # Bỏ qua nếu trận chưa mở luồng phát
+        if not raw_stream_url:
+            print(f"  [X] Bỏ qua {match_id}: Chưa có luồng phát hoặc chưa đến giờ")
+            continue
 
-        # Nối Referer & User-Agent vào URL cho TiviMate
+        # Đính kèm Header Referer & User-Agent cho TiviMate
         stream_url_for_tivimate = f"{raw_stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}"
 
         sport_type = str(match.get("type", "football")).lower()
@@ -147,13 +163,13 @@ def generate_m3u():
         m3u_lines.append(stream_url_for_tivimate)
         m3u_lines.append("")
         count += 1
-        print(f"  [OK] Đã thêm: {title}")
+        print(f"  [OK] Đã lấy link thành công: {title}")
 
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
     print(f"\n==========================================")
-    print(f"Đã cập nhật thành công {count} trận vào giovang.m3u")
+    print(f"Đã cập nhật thành công {count} trận chuẩn vào giovang.m3u")
     print(f"==========================================")
 
 if __name__ == "__main__":
