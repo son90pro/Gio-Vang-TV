@@ -13,3 +13,13 @@ https://vcdn.cloud/live/ifg3o1ysrx8a/index.m3u8|Referer=https://giovang.rent/&Us
 #EXTVLCOPT:http-referrer=https://giovang.rent/
 #EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
 https://vcdn.cloud/live/gkjgfmtug9qg/index.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/malta.png" group-title="Giờ Vàng TV" , 🟢 23:00 04/10 ⚽ Malta vs Andorra (Béo) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.rent/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+https://vcdn.cloud/live/69f7e7425c39b5554409bf77/index.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/kosovo.png" group-title="Giờ Vàng TV" , 🟢 23:00 04/10 ⚽ Kosovo vs Áo (Trí) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.rent/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+https://vcdn.cloud/live/69f7e7425c39b5554409bf5a/index.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
