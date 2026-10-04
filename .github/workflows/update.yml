@@ -5,6 +5,9 @@ on:
     - cron: '0 */3 * * *'  # Chạy mỗi 3 tiếng
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
