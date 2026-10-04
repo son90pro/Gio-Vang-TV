@@ -10,6 +10,7 @@ except ImportError:
     HAS_CLOUDSCRAPER = False
 
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
+WIDGET_API_URL = "https://fixture-widget.keonhacaitp.one/api/widget/{match_id}"
 PRIMARY_CDN = "https://ftlh5sc02iliv.vcdn.cloud"
 
 SPORT_ICONS = {
@@ -21,7 +22,7 @@ SPORT_ICONS = {
     "billiards": "🎱", "bida": "🎱",
     "vothuat": "🥊", "boxing": "🥊", "mma": "🥊",
     "esport": "🎮", "esports": "🎮", "game": "🎮",
-    "f1": "[formula1]", "formula1": "[formula1]"
+    "f1": "🏎️", "formula1": "🏎️"
 }
 
 HEADERS = {
@@ -33,8 +34,9 @@ HEADERS = {
 
 def create_http_session():
     if HAS_CLOUDSCRAPER:
-        return cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
-    session = requests.Session()
+        session = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
+    else:
+        session = requests.Session()
     session.headers.update(HEADERS)
     return session
 
@@ -57,24 +59,46 @@ def clean_blv_name(blv_raw):
         return blv_map[clean.lower()]
     return clean.capitalize() if clean else "BLV"
 
-def fetch_matches():
+def fetch_matches(session):
     timestamp = int(time.time())
     url = f"{LIVE_API_URL}?t={timestamp}"
-    session = create_http_session()
 
     try:
-        response = session.get(url, headers=HEADERS, timeout=12)
+        response = session.get(url, timeout=12)
         if response.status_code == 200:
             res_json = response.json()
             return res_json.get("response", [])
     except Exception as e:
-        print(f"[ERR] API: {e}")
+        print(f"[ERR] API live.json: {e}")
     return []
 
+def get_stream_url(session, match_id):
+    """Gọi Widget API để lấy link .m3u8 CDN thật chứa ID số chuẩn"""
+    url = WIDGET_API_URL.format(match_id=match_id)
+    try:
+        res = session.get(url, timeout=8)
+        if res.status_code == 200:
+            data = res.json()
+            stream_url = data.get("pc_stream_url") or data.get("mobile_stream_url")
+            if not stream_url and isinstance(data.get("response"), dict):
+                resp = data.get("response", {})
+                stream_url = resp.get("pc_stream_url") or resp.get("mobile_stream_url")
+            
+            if stream_url:
+                return stream_url
+    except Exception:
+        pass
+    
+    # Dự phòng nếu Widget API tạm thời không khả dụng
+    return f"{PRIMARY_CDN}/{match_id}_hd/{match_id}_hd@720p.m3u8"
+
 def generate_m3u():
-    matches = fetch_matches()
+    session = create_http_session()
+    matches = fetch_matches(session)
     m3u_lines = ["#EXTM3U"]
     count = 0
+
+    print(f"-> Tìm thấy {len(matches)} trận đấu trong danh sách. Đang bóc tách link stream...")
 
     for match in matches:
         status_code = str(match.get("status_code", "")).upper()
@@ -86,8 +110,8 @@ def generate_m3u():
         if not match_id:
             continue
 
-        # Giữ nguyên ID gốc của API (ví dụ: njzlpe07h95m) ghép trực tiếp vào CDN
-        stream_url = f"{PRIMARY_CDN}/{match_id}_hd/{match_id}_hd@720p.m3u8"
+        # Lấy link stream chuẩn từ CDN qua Widget API
+        stream_url = get_stream_url(session, match_id)
 
         sport_type = str(match.get("type", "football")).lower()
         icon = SPORT_ICONS.get(sport_type, "⚽")
