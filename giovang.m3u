@@ -1,1 +1,15 @@
 #EXTM3U
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/b5t4Xih5-Q1BcQwtS.png" group-title="Giờ Vàng TV" , 🟢 20:00 04/10 ⚽ Fleury 91 W vs PSG W (Béo) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.rent/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+https://vcdn.cloud/live/j10b03wex77g/index.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1ixbSdElSMIRxr1b2IMjympAdP1ka8tiMG8B5AAJ89OI7QXDCFzymVH8&s=10" group-title="Giờ Vàng TV" , 🟢 16:00 04/10 🎮 Round 2 High Matches vs 2026 (Mickey) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.rent/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+https://vcdn.cloud/live/ifg3o1ysrx8a/index.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/KbmUMPg5-tbPaYDWc.png" group-title="Giờ Vàng TV" , 🟢 20:30 04/10 ⚽ Washington Commanders vs Indianapolis Colts (Riko) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.rent/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+https://vcdn.cloud/live/gkjgfmtug9qg/index.m3u8|Referer=https://giovang.rent/&User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
