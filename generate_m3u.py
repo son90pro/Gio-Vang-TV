@@ -11,7 +11,9 @@ except ImportError:
 
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 WIDGET_API_URL = "https://fixture-widget.keonhacaitp.one/api/widget/{match_id}"
-PRIMARY_CDN = "https://ftlh5sc02iliv.vcdn.cloud"
+
+REFERER_URL = "https://giovang.rent/"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
 SPORT_ICONS = {
     "football": "⚽", "bongda": "⚽",
@@ -22,13 +24,13 @@ SPORT_ICONS = {
     "billiards": "🎱", "bida": "🎱",
     "vothuat": "🥊", "boxing": "🥊", "mma": "🥊",
     "esport": "🎮", "esports": "🎮", "game": "🎮",
-    "f1": "🏎️", "formula1": "🏎️"
+    "f1": "🏎️", "formula1": "🏎️️"
 }
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "User-Agent": USER_AGENT,
     "Accept": "application/json, text/plain, */*",
-    "Referer": "https://giovang.rent/",
+    "Referer": REFERER_URL,
     "Origin": "https://giovang.rent"
 }
 
@@ -73,7 +75,7 @@ def fetch_matches(session):
     return []
 
 def get_stream_url(session, match_id):
-    """Gọi Widget API để lấy link .m3u8 CDN thật chứa ID số chuẩn"""
+    """Gọi Widget API để lấy link .m3u8 CDN chuẩn chứa ID số"""
     url = WIDGET_API_URL.format(match_id=match_id)
     try:
         res = session.get(url, timeout=8)
@@ -84,13 +86,12 @@ def get_stream_url(session, match_id):
                 resp = data.get("response", {})
                 stream_url = resp.get("pc_stream_url") or resp.get("mobile_stream_url")
             
-            if stream_url:
+            if stream_url and stream_url.startswith("http"):
                 return stream_url
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"  └─ Lỗi gọi Widget API cho {match_id}: {e}")
     
-    # Dự phòng nếu Widget API tạm thời không khả dụng
-    return f"{PRIMARY_CDN}/{match_id}_hd/{match_id}_hd@720p.m3u8"
+    return None
 
 def generate_m3u():
     session = create_http_session()
@@ -98,7 +99,7 @@ def generate_m3u():
     m3u_lines = ["#EXTM3U"]
     count = 0
 
-    print(f"-> Tìm thấy {len(matches)} trận đấu trong danh sách. Đang bóc tách link stream...")
+    print(f"-> Quét được {len(matches)} trận đấu. Đang tiến hành lấy link CDN...")
 
     for match in matches:
         status_code = str(match.get("status_code", "")).upper()
@@ -110,8 +111,16 @@ def generate_m3u():
         if not match_id:
             continue
 
-        # Lấy link stream chuẩn từ CDN qua Widget API
-        stream_url = get_stream_url(session, match_id)
+        # Lấy link stream thật từ Widget API
+        raw_stream_url = get_stream_url(session, match_id)
+        
+        # Nếu chưa có link phát (trận chưa mở luồng), bỏ qua không đưa vào M3U
+        if not raw_stream_url:
+            print(f"  [X] Bỏ qua trận {match_id} (chưa có link stream CDN)")
+            continue
+
+        # Nối Referer & User-Agent vào URL để TiviMate gửi kèm Header khi mở luồng
+        stream_url_for_tivimate = f"{raw_stream_url}|Referer={REFERER_URL}&User-Agent={USER_AGENT}"
 
         sport_type = str(match.get("type", "football")).lower()
         icon = SPORT_ICONS.get(sport_type, "⚽")
@@ -136,15 +145,21 @@ def generate_m3u():
 
         title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv}) [hls]"
 
+        # Ghi các thông số đính kèm Referer cho TiviMate / OTT Navigator
         m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}')
-        m3u_lines.append(stream_url)
+        m3u_lines.append(f'#EXTVLCOPT:http-referrer={REFERER_URL}')
+        m3u_lines.append(f'#EXTVLCOPT:http-user-agent={USER_AGENT}')
+        m3u_lines.append(stream_url_for_tivimate)
         m3u_lines.append("")
         count += 1
+        print(f"  [OK] Đã thêm: {title}")
 
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
-    print(f"Đã cập nhật thành công {count} trận vào giovang.m3u")
+    print(f"\n==========================================")
+    print(f"Đã cập nhật thành công {count} trận chạy được vào giovang.m3u")
+    print(f"==========================================")
 
 if __name__ == "__main__":
     generate_m3u()
