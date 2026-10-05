@@ -1,16 +1,7 @@
 #EXTM3U
 
-#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/tSfwGCdM-MJZajegG.png" group-title="Giờ Vàng TV" , 🟢 18:00 05/10 🎾 Novak Djokovic vs Daniil Medvedev (Bên) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791198000_hd/1791198000_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/CMe9zXzS-QNrz0V5B.png" group-title="Giờ Vàng TV" , 🟢 04:00 06/10 ⚾ Cleverland Guardians vs Chicago White Sox (Riko) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791234000_hd/1791234000_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/indonesia.png" group-title="Giờ Vàng TV" , 🟢 20:00 05/10 ⚽ Indonesia vs Thái Lan (Hậu) [hls]
-https://vcdn.cloud/live/6ac1970824d46db87058bd90/index.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/montenegro-u21.png" group-title="Giờ Vàng TV" , 🟢 21:30 05/10 ⚽ U21 Montenegro vs U21 Armenia (Ngơ) [hls]
-https://vcdn.cloud/live/683b98524bc32556c602744b/index.m3u8
-
-#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTFFcfUGo7QmrMRL1Dg39DgPsEgv_9bV8hqxLgdK26Z4Q&s" group-title="Giờ Vàng TV" , 🟢 16:00 05/10 🎮 Round 3 Mid-Win Matches vs Round 3 Mid-Win Matches (Mickey) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791190800_hd/1791190800_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwsXo22dR0a8IwO2dJ7JIgmB8rC0jxrLUToAz8V8rzvg&s" group-title="Giờ Vàng TV" , 🟢 17:00 05/10 🏓 R64 - Bàn TT vs R64 - Bàn TT (18) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791194400_hd/1791194400_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/estudiantes-la-plata.png" group-title="Giờ Vàng TV" , 🟢 05:00 06/10 ⚽ Estudiantes La Plata vs Gimnasia Mendoza (Ngong) [hls]
+https://vcdn.cloud/live/6ab9ae3b24d46db870ba52a3/index.m3u8
