@@ -10,10 +10,12 @@ except ImportError:
 
 LIVE_API_URL = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 WIDGET_API_URL = "https://fixture-widget.keonhacaitp.one/api/widget/{match_id}"
-NO_SIGNAL_URL = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
-REFERER_URL = "https://giovang.rent/"
+# Link video màn hình chờ chuẩn HLS (không bị xoay tròn) dùng khi trận chưa có luồng phát
+FALLBACK_WAITING_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+REFERER_URL = "https://giovang.rent/"
 
 SPORT_ICONS = {
     "football": "⚽", "bongda": "⚽",
@@ -73,7 +75,7 @@ def fetch_matches(session):
     return []
 
 def find_m3u8_deep(data):
-    """Tìm link .m3u8 đệ quy trong dữ liệu JSON"""
+    """Tìm link .m3u8 trực tiếp nếu có"""
     if isinstance(data, str):
         if ".m3u8" in data and "http" in data:
             return data.replace("\\/", "/")
@@ -92,6 +94,45 @@ def find_m3u8_deep(data):
                 return res
     return None
 
+def extract_stream_id(data):
+    """Bóc tách ID luồng CDN 10 chữ số (dạng 1791xxxxxx) hoặc 24 hex"""
+    if isinstance(data, (int, str)):
+        s = str(data).strip()
+        # Tìm ID dạng số 10 chữ số của Giờ Vàng
+        m = re.findall(r'\b(179\d{7}|180\d{7}|\d{10})\b', s)
+        if m:
+            return m[0]
+        # Hoặc Hex 24 ký tự
+        m_hex = re.findall(r'\b([0-9a-fA-F]{24})\b', s)
+        if m_hex:
+            return m_hex[0]
+    elif isinstance(data, dict):
+        for k in ['stream_id', 'stream', 'embed', 'link', 'id', 'room_id', 'fi']:
+            if k in data and data[k]:
+                res = extract_stream_id(data[k])
+                if res:
+                    return res
+        for v in data.values():
+            res = extract_stream_id(v)
+            if res:
+                return res
+    elif isinstance(data, list):
+        for item in data:
+            res = extract_stream_id(item)
+            if res:
+                return res
+    return None
+
+def build_vcdn_url(stream_id):
+    if not stream_id:
+        return None
+    sid = str(stream_id).strip()
+    if len(sid) == 10 and sid.isdigit():
+        return f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8"
+    elif len(sid) == 24:
+        return f"https://vcdn.cloud/live/{sid}/index.m3u8"
+    return None
+
 def fetch_via_jina(url, session):
     jina_url = f"https://r.jina.ai/{url}"
     try:
@@ -103,12 +144,18 @@ def fetch_via_jina(url, session):
     return None
 
 def get_stream_url(session, match):
-    # 1. Tìm trực tiếp link .m3u8 trong JSON trận đấu
+    # 1. Nếu trong JSON có sẵn link .m3u8
     m3u8_direct = find_m3u8_deep(match)
     if m3u8_direct:
         return m3u8_direct
 
-    # 2. Cào Widget API qua Jina Reader proxy nếu chưa có link trực tiếp
+    # 2. Tìm ID luồng 10 chữ số trong JSON trận
+    sid = extract_stream_id(match)
+    vcdn_url = build_vcdn_url(sid)
+    if vcdn_url:
+        return vcdn_url
+
+    # 3. Cào qua Widget API nếu chưa lấy được ID
     match_id = str(match.get("id") or match.get("fi") or "").strip()
     if match_id:
         target = WIDGET_API_URL.format(match_id=match_id)
@@ -117,9 +164,17 @@ def get_stream_url(session, match):
             m3u8_found = find_m3u8_deep(page_text)
             if m3u8_found:
                 return m3u8_found
+            sid_web = extract_stream_id(page_text)
+            vcdn_web = build_vcdn_url(sid_web)
+            if vcdn_web:
+                return vcdn_web
 
-    # 3. Trận chưa có luồng LIVE -> Trả về link No-Signal chờ theo chuẩn Giờ Vàng
-    return NO_SIGNAL_URL
+    # 4. Nếu match_id chính là ID luồng 10 chữ số
+    if match_id and len(match_id) == 10 and match_id.isdigit():
+        return build_vcdn_url(match_id)
+
+    # Fallback an toàn nếu trận chưa tới giờ
+    return FALLBACK_WAITING_URL
 
 def generate_m3u():
     session = create_http_session()
@@ -158,18 +213,19 @@ def generate_m3u():
         is_live = match.get("is_live") in [True, 1, "1", "true", "True"] or status_code == "LIVE"
         status_symbol = "🟢 " if is_live else "🟡 "
 
-        # Định dạng tiêu đề kênh
         title = f"{status_symbol}{time_str} {day_month} {icon} {home_name} vs {away_name} ({blv}) [hls]"
 
-        # Xuất định dạng M3U trần cực kỳ tối giản & chuẩn xác
         m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {title}')
         m3u_lines.append(f'{raw_stream_url}\n')
         count += 1
+        print(f"  [OK] {title} -> {raw_stream_url}")
 
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
+    print(f"\n==========================================")
     print(f"Tạo playlist thành công! Tổng cộng: {count} kênh")
+    print(f"==========================================")
 
 if __name__ == "__main__":
     generate_m3u()
