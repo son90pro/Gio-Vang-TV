@@ -8,22 +8,23 @@ API_TARGET = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 WORKER_PROXY = f"https://vsc-proxy.sonnguyen90pro.workers.dev/?url={API_TARGET}"
 
 CDN_BASE = "https://ftlh5sc02iliv.vcdn.cloud"
-REFERER_HEADER = "https://keobongvip.in/"
 USER_AGENT_HEADER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
-# Danh sách mã rác/ID tĩnh cần loại bỏ hoàn toàn
-BLACK_LIST_IDS = {"1790675945", "1790000000"}
-
-TYPE_MAP = {
-    "football": "Bóng đá",
-    "basketball": "Bóng rổ",
-    "rugby": "Bóng bầu dục / NFL",
-    "bongchay": "Bóng chày",
-    "caulong": "Cầu lông / Trái cầu",
+# Emoji icon chuẩn theo từng bộ môn
+EMOJI_MAP = {
+    "football": "⚽",
+    "basketball": "🏀",
+    "caulong": "🏸",
+    "badminton": "🏸",
+    "esports": "🎮",
+    "game": "🎮",
+    "bongchay": "⚾",
+    "baseball": "⚾",
+    "rugby": "🏈",
 }
 
-def get_group_title(sport_type, league_title=""):
-    return TYPE_MAP.get(str(sport_type).lower(), league_title or "Giờ Vàng TV")
+def get_sport_emoji(sport_type):
+    return EMOJI_MAP.get(str(sport_type).lower(), "⚽")
 
 def slugify(text):
     if not text:
@@ -33,38 +34,9 @@ def slugify(text):
     text = re.sub(r'[^a-z0-9]+', '-', text).strip('-')
     return text
 
-def parse_m3u8_from_html(html):
-    """Trích xuất chính xác link stream m3u8 từ player HTML"""
-    if not html:
-        return None
-
-    # 1. Bóc trực tiếp link .m3u8 chứa vcdn.cloud
-    m3u8_urls = re.findall(r'https?://[^\s"\'<>]*vcdn\.cloud[^\s"\'<>]*\.m3u8', html)
-    for url in m3u8_urls:
-        return url
-
-    # 2. Tìm link .m3u8 bất kỳ khác trong config player
-    any_m3u8 = re.findall(r'https?://[^\s"\'<>]+\.m3u8', html)
-    for url in any_m3u8:
-        if "no-signal" not in url:
-            return url
-
-    # 3. Tìm ID phòng live trong player config (dạng url: "...", src: "...")
-    player_ids = re.findall(r'(?:url|src|file|id)\s*[:=]\s*["\'](?:https?://[^\s"\']*/)?(\d{7,10})(?:_hd)?(?:/|\.m3u8|["\'])', html, re.IGNORECASE)
-    for pid in player_ids:
-        if pid not in BLACK_LIST_IDS:
-            return f"{CDN_BASE}/{pid}_hd/{pid}_hd@720p.m3u8"
-
-    # 4. Quét fallback ID thuần số khác ngoại trừ danh sách đen
-    all_ids = re.findall(r'179\d{7,10}', html)
-    for r_id in all_ids:
-        if r_id not in BLACK_LIST_IDS:
-            return f"{CDN_BASE}/{r_id}_hd/{r_id}_hd@720p.m3u8"
-
-    return None
-
-def fetch_real_stream_url(match, homepage_html=""):
-    headers = {"User-Agent": USER_AGENT_HEADER, "Referer": REFERER_HEADER}
+def fetch_real_room_id(match, homepage_html=""):
+    """Chỉ bóc mã phòng Live thực tế (dạng 10 chữ số 179xxxxxxx). Nếu không thấy trả về None."""
+    headers = {"User-Agent": USER_AGENT_HEADER}
     match_id = str(match.get("id") or match.get("fi") or "").strip()
     
     teams = match.get("teams", {})
@@ -74,28 +46,32 @@ def fetch_real_stream_url(match, homepage_html=""):
     
     test_urls = []
     
-    # 1. Slug SEO bài viết chuẩn
-    if home_name and away_name:
-        home_slug = slugify(home_name)
-        away_slug = slugify(away_name)
-        seo_url = f"https://giovang.rent/truc-tiep-{home_slug}-vs-{away_slug}-{day_month}-{match_id}"
-        test_urls.append(seo_url)
-        
-    # 2. Link bài viết bóc từ trang chủ
+    # 1. Quét tìm URL trận đấu trực tiếp từ HTML trang chủ
     if homepage_html and match_id:
         found_links = re.findall(rf'href=["\'](https?://giovang\.rent/truc-tiep-[^"\']*-{match_id})["\']', homepage_html)
         for fl in found_links:
             if fl not in test_urls:
                 test_urls.append(fl)
 
+    # 2. Tạo URL Slug SEO
+    if home_name and away_name:
+        home_slug = slugify(home_name)
+        away_slug = slugify(away_name)
+        seo_url = f"https://giovang.rent/truc-tiep-{home_slug}-vs-{away_slug}-{day_month}-{match_id}"
+        if seo_url not in test_urls:
+            test_urls.append(seo_url)
+
     for url in test_urls:
         proxy_url = f"https://vsc-proxy.sonnguyen90pro.workers.dev/?url={url}"
         try:
             res = requests.get(proxy_url, headers=headers, timeout=6)
             if res.status_code == 200:
-                stream_url = parse_m3u8_from_html(res.text)
-                if stream_url:
-                    return stream_url
+                html = res.text
+                # Lấy mã phòng live 10 chữ số bắt đầu bằng 179
+                room_ids = re.findall(r'179\d{7}', html)
+                for rid in room_ids:
+                    if rid != "1790675945": # Lọc mã quảng cáo tĩnh
+                        return rid
         except Exception:
             pass
 
@@ -107,14 +83,14 @@ def extract_commentator(match):
         clean_names = []
         for name in blv_list:
             if isinstance(name, str):
-                c_name = name.replace("blv-", "").replace("blv_", "").strip().title()
+                c_name = name.replace("blv-", "").replace("blv_", "").strip()
                 clean_names.append(c_name)
         if clean_names:
             return ", ".join(clean_names)
     return "Thuyết minh"
 
 def generate_m3u():
-    headers = {"User-Agent": USER_AGENT_HEADER, "Referer": REFERER_HEADER}
+    headers = {"User-Agent": USER_AGENT_HEADER}
     
     homepage_html = ""
     try:
@@ -146,8 +122,7 @@ def generate_m3u():
         logo_url = teams.get("home", {}).get("logo", "")
         
         sport_type = match.get("type", "")
-        league_title = match.get("league", {}).get("title", "")
-        group_title = get_group_title(sport_type, league_title)
+        sport_emoji = get_sport_emoji(sport_type)
         
         time_raw = match.get("time", "")[:5]
         day_month = match.get("day_month", "")
@@ -158,16 +133,16 @@ def generate_m3u():
         is_live = match.get("is_live", False) or match.get("status_code") == "LIVE"
         status_icon = "🟢 " if is_live else ""
 
-        real_stream_url = fetch_real_stream_url(match, homepage_html)
+        # Lấy room_id thực tế (179xxxxxxx)
+        room_id = fetch_real_room_id(match, homepage_html)
         
-        if real_stream_url:
-            stream_url = f"{real_stream_url}|Referer={REFERER_HEADER}&User-Agent={USER_AGENT_HEADER}"
+        if room_id:
+            # Xuất URL thuần sạch sẽ theo đúng format list chuẩn
+            stream_url = f"{CDN_BASE}/{room_id}_hd/{room_id}_hd@720p.m3u8"
         else:
             stream_url = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
-        m3u_content += f'#EXTINF:-1 tvg-logo="{logo_url}" group-title="{group_title}" http-referrer="{REFERER_HEADER}" http-user-agent="{USER_AGENT_HEADER}" , {status_icon}{time_str} ⚽ {match_name} ({commentator}) [hls]\n'
-        m3u_content += f'#EXTVLCOPT:http-referrer={REFERER_HEADER}\n'
-        m3u_content += f'#EXTVLCOPT:http-user-agent={USER_AGENT_HEADER}\n'
+        m3u_content += f'#EXTINF:-1 tvg-logo="{logo_url}" group-title="Giờ Vàng TV" , {status_icon}{time_str} {sport_emoji} {match_name} ({commentator}) [hls]\n'
         m3u_content += f'{stream_url}\n\n'
         count += 1
         
