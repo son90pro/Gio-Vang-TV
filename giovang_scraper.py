@@ -11,6 +11,9 @@ CDN_BASE = "https://ftlh5sc02iliv.vcdn.cloud"
 REFERER_HEADER = "https://keobongvip.in/"
 USER_AGENT_HEADER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
+# Danh sách mã rác/ID tĩnh cần loại bỏ hoàn toàn
+BLACK_LIST_IDS = {"1790675945", "1790000000"}
+
 TYPE_MAP = {
     "football": "Bóng đá",
     "basketball": "Bóng rổ",
@@ -23,13 +26,42 @@ def get_group_title(sport_type, league_title=""):
     return TYPE_MAP.get(str(sport_type).lower(), league_title or "Giờ Vàng TV")
 
 def slugify(text):
-    """Chuyển đổi tên đội bóng thành dạng slug không dấu, gạch nối (Ví dụ: Sacramento Kings -> sacramento-kings)"""
     if not text:
         return ""
     text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8')
     text = text.lower()
     text = re.sub(r'[^a-z0-9]+', '-', text).strip('-')
     return text
+
+def parse_m3u8_from_html(html):
+    """Trích xuất chính xác link stream m3u8 từ player HTML"""
+    if not html:
+        return None
+
+    # 1. Bóc trực tiếp link .m3u8 chứa vcdn.cloud
+    m3u8_urls = re.findall(r'https?://[^\s"\'<>]*vcdn\.cloud[^\s"\'<>]*\.m3u8', html)
+    for url in m3u8_urls:
+        return url
+
+    # 2. Tìm link .m3u8 bất kỳ khác trong config player
+    any_m3u8 = re.findall(r'https?://[^\s"\'<>]+\.m3u8', html)
+    for url in any_m3u8:
+        if "no-signal" not in url:
+            return url
+
+    # 3. Tìm ID phòng live trong player config (dạng url: "...", src: "...")
+    player_ids = re.findall(r'(?:url|src|file|id)\s*[:=]\s*["\'](?:https?://[^\s"\']*/)?(\d{7,10})(?:_hd)?(?:/|\.m3u8|["\'])', html, re.IGNORECASE)
+    for pid in player_ids:
+        if pid not in BLACK_LIST_IDS:
+            return f"{CDN_BASE}/{pid}_hd/{pid}_hd@720p.m3u8"
+
+    # 4. Quét fallback ID thuần số khác ngoại trừ danh sách đen
+    all_ids = re.findall(r'179\d{7,10}', html)
+    for r_id in all_ids:
+        if r_id not in BLACK_LIST_IDS:
+            return f"{CDN_BASE}/{r_id}_hd/{r_id}_hd@720p.m3u8"
+
+    return None
 
 def fetch_real_stream_url(match, homepage_html=""):
     headers = {"User-Agent": USER_AGENT_HEADER, "Referer": REFERER_HEADER}
@@ -42,37 +74,28 @@ def fetch_real_stream_url(match, homepage_html=""):
     
     test_urls = []
     
-    # 1. Tạo Slug SEO chuẩn xác của Giờ Vàng
+    # 1. Slug SEO bài viết chuẩn
     if home_name and away_name:
         home_slug = slugify(home_name)
         away_slug = slugify(away_name)
         seo_url = f"https://giovang.rent/truc-tiep-{home_slug}-vs-{away_slug}-{day_month}-{match_id}"
         test_urls.append(seo_url)
         
-    # 2. Tìm link bài viết tương ứng trên trang chủ (nếu Slug tự tạo có sai lệch nhỏ)
+    # 2. Link bài viết bóc từ trang chủ
     if homepage_html and match_id:
         found_links = re.findall(rf'href=["\'](https?://giovang\.rent/truc-tiep-[^"\']*-{match_id})["\']', homepage_html)
         for fl in found_links:
             if fl not in test_urls:
                 test_urls.append(fl)
 
-    # Quét qua từng URL bài viết để lấy mã Live 179... thật
     for url in test_urls:
         proxy_url = f"https://vsc-proxy.sonnguyen90pro.workers.dev/?url={url}"
         try:
             res = requests.get(proxy_url, headers=headers, timeout=6)
             if res.status_code == 200:
-                html = res.text
-                
-                # Bóc trực tiếp link .m3u8 vcdn.cloud
-                m3u8_found = re.search(r'https?://[^\s"\']*vcdn\.cloud[^\s"\']*\.m3u8', html)
-                if m3u8_found:
-                    return m3u8_found.group(0)
-                
-                # Bóc mã phòng live thực tế 10 chữ số (như 1791215852)
-                room_ids = re.findall(r'179\d{7,10}', html)
-                if room_ids:
-                    return f"{CDN_BASE}/{room_ids[0]}_hd/{room_ids[0]}_hd@720p.m3u8"
+                stream_url = parse_m3u8_from_html(res.text)
+                if stream_url:
+                    return stream_url
         except Exception:
             pass
 
@@ -93,10 +116,9 @@ def extract_commentator(match):
 def generate_m3u():
     headers = {"User-Agent": USER_AGENT_HEADER, "Referer": REFERER_HEADER}
     
-    # Tải trước HTML trang chủ qua Worker Proxy
     homepage_html = ""
     try:
-        hp_res = requests.get(f"https://vsc-proxy.sonnguyen90pro.workers.dev/?url=https://giovang.rent", headers=headers, timeout=8)
+        hp_res = requests.get("https://vsc-proxy.sonnguyen90pro.workers.dev/?url=https://giovang.rent", headers=headers, timeout=8)
         if hp_res.status_code == 200:
             homepage_html = hp_res.text
     except Exception:
@@ -136,8 +158,6 @@ def generate_m3u():
         is_live = match.get("is_live", False) or match.get("status_code") == "LIVE"
         status_icon = "🟢 " if is_live else ""
 
-        match_id = str(match.get("id") or match.get("fi") or "").strip()
-        
         real_stream_url = fetch_real_stream_url(match, homepage_html)
         
         if real_stream_url:
