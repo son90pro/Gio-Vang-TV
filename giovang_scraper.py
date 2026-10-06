@@ -46,9 +46,9 @@ def deep_search_ids(obj, ignore_keys=None):
     elif isinstance(obj, list):
         for item in obj:
             found_ids.extend(deep_search_ids(item, ignore_keys))
-        elif isinstance(obj, (int, str)):
-            if is_valid_stream_id(obj):
-                found_ids.append(str(obj).strip())
+    elif isinstance(obj, (int, str)):
+        if is_valid_stream_id(obj):
+            found_ids.append(str(obj).strip())
     return found_ids
 
 def extract_stream_url(match):
