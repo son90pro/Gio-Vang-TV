@@ -1,6 +1,7 @@
 import json
 import re
 import sys
+import unicodedata
 import requests
 
 API_TARGET = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
@@ -21,52 +22,59 @@ TYPE_MAP = {
 def get_group_title(sport_type, league_title=""):
     return TYPE_MAP.get(str(sport_type).lower(), league_title or "Giờ Vàng TV")
 
-def is_stream_valid(m3u8_url):
-    """Kiểm tra xem link .m3u8 có thực sự tồn tại (HTTP 200) trên CDN hay không"""
-    headers = {"User-Agent": USER_AGENT_HEADER, "Referer": REFERER_HEADER}
-    try:
-        res = requests.head(m3u8_url, headers=headers, timeout=4, allow_redirects=True)
-        if res.status_code == 200:
-            return True
-        res = requests.get(m3u8_url, headers=headers, timeout=4, stream=True)
-        return res.status_code == 200
-    except Exception:
-        return False
+def slugify(text):
+    """Chuyển đổi tên đội bóng thành dạng slug không dấu, gạch nối (Ví dụ: Sacramento Kings -> sacramento-kings)"""
+    if not text:
+        return ""
+    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8')
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9]+', '-', text).strip('-')
+    return text
 
-def fetch_real_stream_url(match_id):
-    """Tìm và kiểm chứng link m3u8 trực tiếp từ web/API"""
+def fetch_real_stream_url(match, homepage_html=""):
     headers = {"User-Agent": USER_AGENT_HEADER, "Referer": REFERER_HEADER}
+    match_id = str(match.get("id") or match.get("fi") or "").strip()
     
-    test_urls = [
-        f"https://giovang.rent/{match_id}",
-        f"https://giovang.rent/truc-tiep/{match_id}",
-    ]
+    teams = match.get("teams", {})
+    home_name = teams.get("home", {}).get("name", "")
+    away_name = teams.get("away", {}).get("name", "")
+    day_month = match.get("day_month", "").replace("/", "-")
     
+    test_urls = []
+    
+    # 1. Tạo Slug SEO chuẩn xác của Giờ Vàng
+    if home_name and away_name:
+        home_slug = slugify(home_name)
+        away_slug = slugify(away_name)
+        seo_url = f"https://giovang.rent/truc-tiep-{home_slug}-vs-{away_slug}-{day_month}-{match_id}"
+        test_urls.append(seo_url)
+        
+    # 2. Tìm link bài viết tương ứng trên trang chủ (nếu Slug tự tạo có sai lệch nhỏ)
+    if homepage_html and match_id:
+        found_links = re.findall(rf'href=["\'](https?://giovang\.rent/truc-tiep-[^"\']*-{match_id})["\']', homepage_html)
+        for fl in found_links:
+            if fl not in test_urls:
+                test_urls.append(fl)
+
+    # Quét qua từng URL bài viết để lấy mã Live 179... thật
     for url in test_urls:
+        proxy_url = f"https://vsc-proxy.sonnguyen90pro.workers.dev/?url={url}"
         try:
-            res = requests.get(url, headers=headers, timeout=5)
+            res = requests.get(proxy_url, headers=headers, timeout=6)
             if res.status_code == 200:
                 html = res.text
-                # 1. Tìm link .m3u8 trực tiếp
-                m3u8_matches = re.findall(r'https?://[^\s"\']*vcdn\.cloud[^\s"\']*\.m3u8', html)
-                for candidate in m3u8_matches:
-                    if is_stream_valid(candidate):
-                        return candidate
                 
-                # 2. Tìm ID dạng 179... và test link
-                room_ids = re.findall(r'179\d{7}', html)
-                for r_id in room_ids:
-                    candidate = f"{CDN_BASE}/{r_id}_hd/{r_id}_hd@720p.m3u8"
-                    if is_stream_valid(candidate):
-                        return candidate
+                # Bóc trực tiếp link .m3u8 vcdn.cloud
+                m3u8_found = re.search(r'https?://[^\s"\']*vcdn\.cloud[^\s"\']*\.m3u8', html)
+                if m3u8_found:
+                    return m3u8_found.group(0)
+                
+                # Bóc mã phòng live thực tế 10 chữ số (như 1791215852)
+                room_ids = re.findall(r'179\d{7,10}', html)
+                if room_ids:
+                    return f"{CDN_BASE}/{room_ids[0]}_hd/{room_ids[0]}_hd@720p.m3u8"
         except Exception:
             pass
-
-    # 3. Nếu match_id gốc là chuỗi số, kiểm tra trực tiếp CDN
-    if str(match_id).isdigit():
-        candidate = f"{CDN_BASE}/{match_id}_hd/{match_id}_hd@720p.m3u8"
-        if is_stream_valid(candidate):
-            return candidate
 
     return None
 
@@ -83,7 +91,18 @@ def extract_commentator(match):
     return "Thuyết minh"
 
 def generate_m3u():
-    print("Đang lấy danh sách trận đấu Giờ Vàng TV...")
+    headers = {"User-Agent": USER_AGENT_HEADER, "Referer": REFERER_HEADER}
+    
+    # Tải trước HTML trang chủ qua Worker Proxy
+    homepage_html = ""
+    try:
+        hp_res = requests.get(f"https://vsc-proxy.sonnguyen90pro.workers.dev/?url=https://giovang.rent", headers=headers, timeout=8)
+        if hp_res.status_code == 200:
+            homepage_html = hp_res.text
+    except Exception:
+        pass
+
+    print("Đang lấy danh sách trận đấu từ API Giờ Vàng...")
     response = requests.get(WORKER_PROXY, timeout=15)
     response.raise_for_status()
     
@@ -119,14 +138,11 @@ def generate_m3u():
 
         match_id = str(match.get("id") or match.get("fi") or "").strip()
         
-        print(f"Đang kiểm tra luồng phát: {match_name} (ID: {match_id})...")
-        real_stream_url = fetch_real_stream_url(match_id)
+        real_stream_url = fetch_real_stream_url(match, homepage_html)
         
         if real_stream_url:
-            print(f" -> [Thành công] Tìm thấy luồng HLS sống: {real_stream_url}")
             stream_url = f"{real_stream_url}|Referer={REFERER_HEADER}&User-Agent={USER_AGENT_HEADER}"
         else:
-            print(f" -> [Bỏ qua] Trận đấu không có luồng HLS trực tiếp. Gán link No-Signal.")
             stream_url = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
         m3u_content += f'#EXTINF:-1 tvg-logo="{logo_url}" group-title="{group_title}" http-referrer="{REFERER_HEADER}" http-user-agent="{USER_AGENT_HEADER}" , {status_icon}{time_str} ⚽ {match_name} ({commentator}) [hls]\n'
@@ -137,7 +153,7 @@ def generate_m3u():
         
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write(m3u_content)
-    print(f"\nĐã xuất thành công file giovang.m3u với {count} trận đấu.")
+    print(f"Đã xuất thành công file giovang.m3u với {count} trận đấu.")
 
 if __name__ == "__main__":
     try:
