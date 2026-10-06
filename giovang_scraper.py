@@ -20,38 +20,62 @@ TYPE_MAP = {
 def get_group_title(sport_type, league_title=""):
     return TYPE_MAP.get(str(sport_type).lower(), league_title or "Giờ Vàng TV")
 
+def is_valid_stream_id(val_str):
+    """ID luồng chuẩn là mã Unix timestamp 10 chữ số (>1.79 tỷ) không chia hết cho 900 (15 phút thi đấu)"""
+    if not val_str or not val_str.isdigit():
+        return False
+    num = int(val_str)
+    if num > 1700000000 and num % 900 != 0:
+        return True
+    return False
+
 def extract_stream_url(match):
-    # 1. Nếu API trả về trực tiếp đường dẫn .m3u8
+    # 1. Nếu API trả về trực tiếp link .m3u8
     for key in ["stream_url", "hls", "hls_url", "play_url", "link"]:
         val = match.get(key)
         if isinstance(val, str) and ".m3u8" in val:
             return val
 
-    # 2. Tìm ID luồng trong các field chuẩn của API
-    TARGET_KEYS = ["room_id", "stream_id", "live_id", "room", "fi", "id"]
-    candidate_id = None
+    # 2. Quét mảng lồng bên trong (blv, channels, streams, rooms, links)
+    nested_items = []
+    for key in ["blv", "channels", "streams", "rooms", "links", "servers"]:
+        val = match.get(key)
+        if isinstance(val, list):
+            nested_items.extend(val)
 
-    for key in TARGET_KEYS:
-        val = str(match.get(key, "")).strip()
-        if not val or val.lower() == "none":
-            continue
-            
-        # Nếu là chuỗi số (Unix Timestamp trận đấu luôn > 1.7 tỷ và chia hết cho 60)
-        if val.isdigit():
-            num = int(val)
-            if num > 1700000000 and num % 60 == 0:
-                continue  # Bỏ qua vì đây là timestamp thời gian thi đấu
-            candidate_id = val
-            break
-        elif len(val) >= 5: # ID dạng chuỗi
-            candidate_id = val
-            break
+    for item in nested_items:
+        if isinstance(item, dict):
+            for k in ["room_id", "stream_id", "id", "live_id", "channel_id"]:
+                v = str(item.get(k, "")).strip()
+                if is_valid_stream_id(v):
+                    return f"{CDN_BASE}/{v}_hd/{v}_hd@720p.m3u8"
+        elif isinstance(item, (int, str)):
+            v = str(item).strip()
+            if is_valid_stream_id(v):
+                return f"{CDN_BASE}/{v}_hd/{v}_hd@720p.m3u8"
 
-    if candidate_id:
-        return f"{CDN_BASE}/{candidate_id}_hd/{candidate_id}_hd@720p.m3u8"
+    # 3. Quét các trường ở cấp trận đấu
+    for k in ["room_id", "stream_id", "live_id", "channel_id", "room"]:
+        v = str(match.get(k, "")).strip()
+        if is_valid_stream_id(v):
+            return f"{CDN_BASE}/{v}_hd/{v}_hd@720p.m3u8"
 
-    # 3. Trường hợp trận chưa đến giờ hoặc chưa có luồng
+    # 4. Nếu chưa có phòng live -> Trả về link no-signal
     return "https://freem3u.xyz/static/no-signal/low.m3u8"
+
+def extract_commentator(match):
+    blv_data = match.get("blv", [])
+    if isinstance(blv_data, list) and blv_data:
+        names = []
+        for item in blv_data:
+            if isinstance(item, dict):
+                names.append(item.get("name") or item.get("nickname") or item.get("slug", ""))
+            elif isinstance(item, str):
+                clean_name = item.replace("blv-", "").strip().capitalize()
+                names.append(clean_name)
+        if names:
+            return ", ".join(filter(None, names))
+    return "Thuyết minh"
 
 def generate_m3u():
     print("Đang lấy dữ liệu Giờ Vàng TV qua Worker Proxy...")
@@ -83,8 +107,7 @@ def generate_m3u():
         day_month = match.get("day_month", "")
         time_str = f"{time_raw} {day_month}".strip()
         
-        blv_list = match.get("blv", [])
-        commentator = ", ".join(blv_list) if isinstance(blv_list, list) and blv_list else "Thuyết minh"
+        commentator = extract_commentator(match)
         
         is_live = match.get("is_live", False) or match.get("status_code") == "LIVE"
         status_icon = "🟢 " if is_live else ""
