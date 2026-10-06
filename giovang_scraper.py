@@ -21,32 +21,36 @@ def get_group_title(sport_type, league_title=""):
     return TYPE_MAP.get(str(sport_type).lower(), league_title or "Giờ Vàng TV")
 
 def extract_stream_url(match):
-    # 1. Nếu API có sẵn link full .m3u8
-    for key in ["stream_url", "hls", "hls_url", "play_url"]:
+    # 1. Nếu API trả về trực tiếp đường dẫn .m3u8
+    for key in ["stream_url", "hls", "hls_url", "play_url", "link"]:
         val = match.get(key)
         if isinstance(val, str) and ".m3u8" in val:
             return val
 
-    # Các trường thời gian / timestamp CẦN BỎ QUA để không bị nhầm thành ID luồng
-    IGNORE_KEYS = {"time", "timestamp", "start_time", "match_time", "created_at", "updated_at", "date"}
+    # 2. Tìm ID luồng trong các field chuẩn của API
+    TARGET_KEYS = ["room_id", "stream_id", "live_id", "room", "fi", "id"]
+    candidate_id = None
 
-    # 2. Tìm trong các trường ưu tiên chứa ID luồng thực tế của Giờ Vàng
-    PRIORITY_KEYS = ["room_id", "stream_id", "channel_id", "live_id", "room", "id_room"]
-    for key in PRIORITY_KEYS:
+    for key in TARGET_KEYS:
         val = str(match.get(key, "")).strip()
-        # ID hợp lệ là chuỗi số và KHÔNG kết thúc bằng 000/00 (dấu hiệu của Unix timestamp)
-        if val.isdigit() and len(val) >= 7 and not val.endswith("000"):
-            return f"{CDN_BASE}/{val}_hd/{val}_hd@720p.m3u8"
-
-    # 3. Quét các trường còn lại (loại trừ các trường timestamp)
-    for k, v in match.items():
-        if k.lower() in IGNORE_KEYS:
+        if not val or val.lower() == "none":
             continue
-        val_str = str(v).strip()
-        if val_str.isdigit() and len(val_str) >= 7 and not val_str.endswith("000"):
-            return f"{CDN_BASE}/{val_str}_hd/{val_str}_hd@720p.m3u8"
+            
+        # Nếu là chuỗi số (Unix Timestamp trận đấu luôn > 1.7 tỷ và chia hết cho 60)
+        if val.isdigit():
+            num = int(val)
+            if num > 1700000000 and num % 60 == 0:
+                continue  # Bỏ qua vì đây là timestamp thời gian thi đấu
+            candidate_id = val
+            break
+        elif len(val) >= 5: # ID dạng chuỗi
+            candidate_id = val
+            break
 
-    # 4. Trận đấu chưa đến giờ hoặc chưa có luồng phát
+    if candidate_id:
+        return f"{CDN_BASE}/{candidate_id}_hd/{candidate_id}_hd@720p.m3u8"
+
+    # 3. Trường hợp trận chưa đến giờ hoặc chưa có luồng
     return "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 def generate_m3u():
