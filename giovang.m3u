@@ -1,8 +1,14 @@
 #EXTM3U
 
-#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/b7096093642227c698108ad872603a76.png" group-title="Giờ Vàng TV" , 🟢 09:00 06/10 🏀 Sacramento Kings vs Los Angeles Lakers (ben) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791245166_hd/1791245166_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/lam-dong.png" group-title="Giờ Vàng TV" , 🟢 15:30 06/10 ⚽ Lâm Đồng FC vs Sông Lam Nghệ An (sun) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791280263_hd/1791280263_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS_9Nbqsaxp_rrUBkfU3Q3qzaGRKIIqygPknVtO1gXVz74X2pP8usBXoCGw&s=10" group-title="Giờ Vàng TV" , 🟢 10:00 06/10 🏸 HUANG Youzheng vs LIN Yun-Ju (sup) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791248438_hd/1791248438_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/4Aoo4weM-MLEBzXUg.png" group-title="Giờ Vàng TV" , 🟢 16:00 06/10 ⚽ JDG vs LGD (ngu) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791277270_hd/1791277270_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/t4IslGYg-vDolgDz8.png" group-title="Giờ Vàng TV" , 🟢 17:00 06/10 🏀 Suwon KT vs LG Sakers (leo) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791273655_hd/1791273655_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSXpTAF9pPVfwW7DK1pDikNDFkKsgucE_NZRwKc3ZnbTQ&s=10" group-title="Giờ Vàng TV" , 🟢 16:00 06/10 ⚽ Carlos Alcaraz vs Jiri Lehecka (vit) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791277129_hd/1791277129_hd@720p.m3u8
 
