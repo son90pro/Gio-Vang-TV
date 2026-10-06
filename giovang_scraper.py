@@ -6,9 +6,6 @@ import requests
 API_TARGET = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
 WORKER_PROXY = f"https://vsc-proxy.sonnguyen90pro.workers.dev/?url={API_TARGET}"
 
-# Domain CDN phát video của Giờ Vàng
-CDN_BASE = "https://ftlh5sc02iliv.vcdn.cloud"
-
 TYPE_MAP = {
     "football": "Bóng đá",
     "basketball": "Bóng rổ",
@@ -20,93 +17,6 @@ TYPE_MAP = {
 def get_group_title(sport_type, league_title=""):
     return TYPE_MAP.get(str(sport_type).lower(), league_title or "Giờ Vàng TV")
 
-def is_valid_stream_id(val):
-    """Lọc ID phòng live chuẩn: Chuỗi số 7-11 chữ số và không chia hết cho 60 (bỏ qua timestamp giờ đá)"""
-    val_str = str(val).strip()
-    if not val_str.isdigit():
-        return False
-    if not (7 <= len(val_str) <= 11):
-        return False
-    num = int(val_str)
-    if num % 60 == 0:  # Giờ đá tròn phút luôn chia hết cho 60 -> Bỏ qua
-        return False
-    return True
-
-def deep_search_ids(obj, ignore_keys=None):
-    """Đào sâu đệ quy tìm ID dự phòng"""
-    if ignore_keys is None:
-        ignore_keys = {"time", "timestamp", "start_time", "match_time", "date", "created_at"}
-    
-    found_ids = []
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            if str(k).lower() in ignore_keys:
-                continue
-            found_ids.extend(deep_search_ids(v, ignore_keys))
-    elif isinstance(obj, list):
-        for item in obj:
-            found_ids.extend(deep_search_ids(item, ignore_keys))
-    elif isinstance(obj, (int, str)):
-        if is_valid_stream_id(obj):
-            found_ids.append(str(obj).strip())
-    return found_ids
-
-def extract_stream_url(match):
-    # 1. Nếu API có sẵn link .m3u8 trực tiếp
-    for key in ["stream_url", "hls", "hls_url", "play_url", "link"]:
-        val = match.get(key)
-        if isinstance(val, str) and ".m3u8" in val:
-            return val
-
-    # Danh sách các phím tên ID phòng Live chuẩn
-    EXPLICIT_KEYS = ["room_id", "stream_id", "live_id", "channel_id", "room", "id_room", "roomid", "streamid"]
-
-    # 2. Tìm trực tiếp ở cấp trận đấu
-    for key in EXPLICIT_KEYS:
-        val = match.get(key)
-        if is_valid_stream_id(val):
-            s_id = str(val).strip()
-            return f"{CDN_BASE}/{s_id}_hd/{s_id}_hd@720p.m3u8"
-
-    # 3. Tìm trong mảng danh sách BLV / Kênh (blv, channels, streams, rooms)
-    for sub_key in ["blv", "channels", "streams", "rooms", "servers"]:
-        sub_list = match.get(sub_key)
-        if isinstance(sub_list, list):
-            for item in sub_list:
-                if isinstance(item, dict):
-                    for k in EXPLICIT_KEYS + ["id"]:
-                        v = item.get(k)
-                        if is_valid_stream_id(v):
-                            s_id = str(v).strip()
-                            return f"{CDN_BASE}/{s_id}_hd/{s_id}_hd@720p.m3u8"
-                elif is_valid_stream_id(item):
-                    s_id = str(item).strip()
-                    return f"{CDN_BASE}/{s_id}_hd/{s_id}_hd@720p.m3u8"
-
-    # 4. Quét đệ quy toàn bộ trận đấu (phương án dự phòng)
-    candidates = deep_search_ids(match)
-    if candidates:
-        s_id = candidates[0]
-        return f"{CDN_BASE}/{s_id}_hd/{s_id}_hd@720p.m3u8"
-
-    # 5. Nếu chưa mở phòng live -> Trả về link no-signal
-    return "https://freem3u.xyz/static/no-signal/low.m3u8"
-
-def extract_commentator(match):
-    blv_data = match.get("blv", [])
-    if isinstance(blv_data, list) and blv_data:
-        names = []
-        for item in blv_data:
-            if isinstance(item, dict):
-                names.append(item.get("name") or item.get("nickname") or item.get("slug", ""))
-            elif isinstance(item, str):
-                clean_name = item.replace("blv-", "").strip().capitalize()
-                names.append(clean_name)
-        valid_names = [n for n in names if n]
-        if valid_names:
-            return ", ".join(valid_names)
-    return "Thuyết minh"
-
 def generate_m3u():
     print("Đang lấy dữ liệu Giờ Vàng TV qua Worker Proxy...")
     response = requests.get(WORKER_PROXY, timeout=15)
@@ -115,6 +25,14 @@ def generate_m3u():
     res_json = response.json()
     data = res_json.get("response", []) if isinstance(res_json, dict) else []
     
+    # IN TOÀN BỘ CẤU TRÚC JSON CỦA 2 TRẬN ĐẦU TIÊN RA LOG ĐỂ SOI
+    print("\n" + "="*20 + " GIỜ VÀNG API RAW DATA " + "="*20)
+    if data:
+        print(json.dumps(data[:2], indent=2, ensure_ascii=False))
+    else:
+        print("Không lấy được dữ liệu trận đấu!")
+    print("="*60 + "\n")
+
     m3u_content = "#EXTM3U\n\n"
     count = 0
     
@@ -128,29 +46,24 @@ def generate_m3u():
             
         match_name = f"{home_name} vs {away_name}"
         logo_url = teams.get("home", {}).get("logo", "")
-        
         sport_type = match.get("type", "")
         league_title = match.get("league", {}).get("title", "")
         group_title = get_group_title(sport_type, league_title)
         
-        time_raw = match.get("time", "")[:5] # Lấy HH:MM
+        time_raw = match.get("time", "")[:5]
         day_month = match.get("day_month", "")
         time_str = f"{time_raw} {day_month}".strip()
-        
-        commentator = extract_commentator(match)
-        
-        is_live = match.get("is_live", False) or match.get("status_code") == "LIVE"
-        status_icon = "🟢 " if is_live else ""
 
-        stream_url = extract_stream_url(match)
+        # Tạm thời để link no-signal trong lúc lấy log
+        stream_url = "https://freem3u.xyz/static/no-signal/low.m3u8"
 
-        m3u_content += f'#EXTINF:-1 tvg-logo="{logo_url}" group-title="{group_title}" , {status_icon}{time_str} ⚽ {match_name} ({commentator}) [hls]\n'
+        m3u_content += f'#EXTINF:-1 tvg-logo="{logo_url}" group-title="{group_title}" , 🟢 {time_str} ⚽ {match_name} [hls]\n'
         m3u_content += f'{stream_url}\n\n'
         count += 1
         
     with open("giovang.m3u", "w", encoding="utf-8") as f:
         f.write(m3u_content)
-    print(f"Đã xuất thành công file giovang.m3u với {count} luồng.")
+    print(f"Đã xuất file giovang.m3u tạm thời.")
 
 if __name__ == "__main__":
     try:
