@@ -1,7 +1,6 @@
 import json
 import sys
 import requests
-from datetime import datetime
 
 # API target và Cloudflare Worker Proxy
 API_TARGET = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
@@ -19,22 +18,34 @@ TYPE_MAP = {
 }
 
 def get_group_title(sport_type, league_title=""):
-    return TYPE_MAP.get(str(sport_type).lower(), league_title or "Thể thao")
+    return TYPE_MAP.get(str(sport_type).lower(), league_title or "Giờ Vàng TV")
 
-def build_stream_url(match):
-    # Nếu API có sẵn link stream full
-    if match.get("stream_url"):
-        return match["stream_url"]
-    
-    # Nếu API trả về ID (ví dụ: "6aaf224e4e725bdee905b7cf")
-    match_id = match.get("id") or match.get("fi")
-    if not match_id:
-        return None
-        
-    return f"{CDN_BASE}/{match_id}_hd/{match_id}_hd@720p.m3u8"
+def extract_stream_url(match):
+    # 1. Nếu API có sẵn link full .m3u8
+    for key in ["stream_url", "hls", "hls_url", "play_url"]:
+        val = match.get(key)
+        if isinstance(val, str) and ".m3u8" in val:
+            return val
+
+    # 2. Tìm ID luồng dạng DÃY SỐ (ví dụ: 1791214831)
+    # Ưu tiên tìm trong các field phổ biến trước
+    priority_keys = ["room_id", "stream_id", "room", "channel_id", "fi", "id"]
+    for key in priority_keys:
+        val = str(match.get(key, "")).strip()
+        if val.isdigit() and len(val) >= 7:
+            return f"{CDN_BASE}/{val}_hd/{val}_hd@720p.m3u8"
+
+    # 3. Quét toàn bộ object để tìm bất kỳ giá trị nào là dãy số từ 7 chữ số trở lên
+    for k, v in match.items():
+        val_str = str(v).strip()
+        if val_str.isdigit() and len(val_str) >= 7:
+            return f"{CDN_BASE}/{val_str}_hd/{val_str}_hd@720p.m3u8"
+
+    # 4. Fallback cuối cùng nếu trận chưa có luồng phát live
+    return "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 def generate_m3u():
-    print(f"Đang lấy dữ liệu Giờ Vàng TV qua Worker Proxy...")
+    print("Đang lấy dữ liệu Giờ Vàng TV qua Worker Proxy...")
     response = requests.get(WORKER_PROXY, timeout=15)
     response.raise_for_status()
     
@@ -69,11 +80,9 @@ def generate_m3u():
         is_live = match.get("is_live", False) or match.get("status_code") == "LIVE"
         status_icon = "🟢 " if is_live else ""
 
-        stream_url = build_stream_url(match)
-        if not stream_url:
-            continue
+        stream_url = extract_stream_url(match)
 
-        m3u_content += f'#EXTINF:-1 tvg-logo="{logo_url}" group-title="{group_title}" , {status_icon}{time_str} ⚽ {match_name} ({commentator})\n'
+        m3u_content += f'#EXTINF:-1 tvg-logo="{logo_url}" group-title="{group_title}" , {status_icon}{time_str} ⚽ {match_name} ({commentator}) [hls]\n'
         m3u_content += f'{stream_url}\n\n'
         count += 1
         
@@ -87,4 +96,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Lỗi khi chạy script Giờ Vàng: {e}", file=sys.stderr)
         sys.exit(1)
-      
+        
