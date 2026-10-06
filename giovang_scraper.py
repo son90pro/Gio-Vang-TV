@@ -27,21 +27,26 @@ def extract_stream_url(match):
         if isinstance(val, str) and ".m3u8" in val:
             return val
 
-    # 2. Tìm ID luồng dạng DÃY SỐ (ví dụ: 1791214831)
-    # Ưu tiên tìm trong các field phổ biến trước
-    priority_keys = ["room_id", "stream_id", "room", "channel_id", "fi", "id"]
-    for key in priority_keys:
+    # Các trường thời gian / timestamp CẦN BỎ QUA để không bị nhầm thành ID luồng
+    IGNORE_KEYS = {"time", "timestamp", "start_time", "match_time", "created_at", "updated_at", "date"}
+
+    # 2. Tìm trong các trường ưu tiên chứa ID luồng thực tế của Giờ Vàng
+    PRIORITY_KEYS = ["room_id", "stream_id", "channel_id", "live_id", "room", "id_room"]
+    for key in PRIORITY_KEYS:
         val = str(match.get(key, "")).strip()
-        if val.isdigit() and len(val) >= 7:
+        # ID hợp lệ là chuỗi số và KHÔNG kết thúc bằng 000/00 (dấu hiệu của Unix timestamp)
+        if val.isdigit() and len(val) >= 7 and not val.endswith("000"):
             return f"{CDN_BASE}/{val}_hd/{val}_hd@720p.m3u8"
 
-    # 3. Quét toàn bộ object để tìm bất kỳ giá trị nào là dãy số từ 7 chữ số trở lên
+    # 3. Quét các trường còn lại (loại trừ các trường timestamp)
     for k, v in match.items():
+        if k.lower() in IGNORE_KEYS:
+            continue
         val_str = str(v).strip()
-        if val_str.isdigit() and len(val_str) >= 7:
+        if val_str.isdigit() and len(val_str) >= 7 and not val_str.endswith("000"):
             return f"{CDN_BASE}/{val_str}_hd/{val_str}_hd@720p.m3u8"
 
-    # 4. Fallback cuối cùng nếu trận chưa có luồng phát live
+    # 4. Trận đấu chưa đến giờ hoặc chưa có luồng phát
     return "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 def generate_m3u():
