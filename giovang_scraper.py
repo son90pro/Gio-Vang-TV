@@ -21,19 +21,19 @@ def get_group_title(sport_type, league_title=""):
     return TYPE_MAP.get(str(sport_type).lower(), league_title or "Giờ Vàng TV")
 
 def is_valid_stream_id(val):
-    """Lọc ID phòng live chuẩn: Độ dài 7-11 chữ số và không chia hết cho 60 (loại trừ timestamp giờ đá)"""
+    """Lọc ID phòng live chuẩn: Chuỗi số 7-11 chữ số và không chia hết cho 60 (bỏ qua timestamp giờ đá)"""
     val_str = str(val).strip()
     if not val_str.isdigit():
         return False
     if not (7 <= len(val_str) <= 11):
         return False
     num = int(val_str)
-    if num % 60 == 0:  # Giờ thi đấu tròn phút luôn chia hết cho 60 -> Bỏ qua
+    if num % 60 == 0:  # Giờ đá tròn phút luôn chia hết cho 60 -> Bỏ qua
         return False
     return True
 
 def deep_search_ids(obj, ignore_keys=None):
-    """Đào sâu đệ quy toàn bộ cấu trúc JSON để tìm tất cả ID phòng live"""
+    """Đào sâu đệ quy tìm ID dự phòng"""
     if ignore_keys is None:
         ignore_keys = {"time", "timestamp", "start_time", "match_time", "date", "created_at"}
     
@@ -52,29 +52,44 @@ def deep_search_ids(obj, ignore_keys=None):
     return found_ids
 
 def extract_stream_url(match):
-    # 1. Nếu API trả về trực tiếp đường dẫn .m3u8
+    # 1. Nếu API có sẵn link .m3u8 trực tiếp
     for key in ["stream_url", "hls", "hls_url", "play_url", "link"]:
         val = match.get(key)
         if isinstance(val, str) and ".m3u8" in val:
             return val
 
-    # 2. Ưu tiên đào sâu vào các mảng phòng live/BLV (blv, channels, streams, rooms)
-    priority_obj = []
-    for key in ["blv", "channels", "streams", "rooms", "servers", "links"]:
-        if key in match:
-            priority_obj.append(match[key])
+    # Danh sách các phím tên ID phòng Live chuẩn
+    EXPLICIT_KEYS = ["room_id", "stream_id", "live_id", "channel_id", "room", "id_room", "roomid", "streamid"]
 
-    candidates = deep_search_ids(priority_obj)
-    
-    # 3. Nếu trong mảng ưu tiên không có thì đào toàn bộ thông tin trận đấu
-    if not candidates:
-        candidates = deep_search_ids(match)
+    # 2. Tìm trực tiếp ở cấp trận đấu
+    for key in EXPLICIT_KEYS:
+        val = match.get(key)
+        if is_valid_stream_id(val):
+            s_id = str(val).strip()
+            return f"{CDN_BASE}/{s_id}_hd/{s_id}_hd@720p.m3u8"
 
+    # 3. Tìm trong mảng danh sách BLV / Kênh (blv, channels, streams, rooms)
+    for sub_key in ["blv", "channels", "streams", "rooms", "servers"]:
+        sub_list = match.get(sub_key)
+        if isinstance(sub_list, list):
+            for item in sub_list:
+                if isinstance(item, dict):
+                    for k in EXPLICIT_KEYS + ["id"]:
+                        v = item.get(k)
+                        if is_valid_stream_id(v):
+                            s_id = str(v).strip()
+                            return f"{CDN_BASE}/{s_id}_hd/{s_id}_hd@720p.m3u8"
+                elif is_valid_stream_id(item):
+                    s_id = str(item).strip()
+                    return f"{CDN_BASE}/{s_id}_hd/{s_id}_hd@720p.m3u8"
+
+    # 4. Quét đệ quy toàn bộ trận đấu (phương án dự phòng)
+    candidates = deep_search_ids(match)
     if candidates:
-        stream_id = candidates[0]
-        return f"{CDN_BASE}/{stream_id}_hd/{stream_id}_hd@720p.m3u8"
+        s_id = candidates[0]
+        return f"{CDN_BASE}/{s_id}_hd/{s_id}_hd@720p.m3u8"
 
-    # 4. Nếu chưa mở phòng live -> Trả về link no-signal
+    # 5. Nếu chưa mở phòng live -> Trả về link no-signal
     return "https://freem3u.xyz/static/no-signal/low.m3u8"
 
 def extract_commentator(match):
