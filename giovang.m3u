@@ -1,23 +1,2 @@
 #EXTM3U
 
-#EXTINF:-1 tvg-logo="https://ssl.gstatic.com/onebox/media/sports/logos/optimized/FylTPR72JXIGFzqwQocSAQ_96x96.png" group-title="Giờ Vàng TV" , 🟢 01:00 10/10 ⚽ PSV vs Heerenveen (blvhau) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791560727_hd/1791560727_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/12df366aacf59aec8467d50fd0611a5f.png" group-title="Giờ Vàng TV" , 🟢 01:15 10/10 🏀 Olympiacos Piraeus vs Efes Pilsen (diec) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791563500_hd/1791563500_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/lens.png" group-title="Giờ Vàng TV" , 🟢 01:45 10/10 ⚽ Lens vs Lyonnais (blv Mù) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791565270_hd/1791565270_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/al-nassr.png" group-title="Giờ Vàng TV" , 🟢 01:00 10/10 ⚽ Al-Nassr FC vs Al-Draih (ben) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791562063_hd/1791562063_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/borussia-dortmund.png" group-title="Giờ Vàng TV" , 🟢 01:30 10/10 ⚽ Borussia Dortmund vs Werder Bremen (ngong) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791563500_hd/1791563500_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/malaga.png" group-title="Giờ Vàng TV" , 🟢 02:00 10/10 ⚽ Malaga vs Espanyol (mason) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791565270_hd/1791565270_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/west-ham-united.png" group-title="Giờ Vàng TV" , 🟢 02:00 10/10 ⚽ West Ham United vs Queens Park Rangers (sup) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791565277_hd/1791565277_hd@720p.m3u8
-
