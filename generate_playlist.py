@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 # Cấu hình múi giờ Việt Nam (UTC+7)
 TZ_VN = timezone(timedelta(hours=7))
 
-# Phân loại bộ môn & Icon
+# Phân loại bộ môn & Icon nhóm
 SPORT_MAP = {
     "football": {"emoji": "⚽", "group": "Bóng Đá"},
     "basketball": {"emoji": "🏀", "group": "Bóng Rổ"},
@@ -25,10 +25,10 @@ def format_blv(blv_list):
         blv = blv.replace("blv ", "").capitalize()
     return f" ({blv})"
 
-def fetch_independent_matches():
+def fetch_all_giovang_matches():
     """
-    Truy vấn trực tiếp toàn bộ các API chính thức của Giờ Vàng TV 
-    để gom đủ trận đang live, hôm nay và ngày mai mà không phụ thuộc ai.
+    Truy vấn đồng thời tất cả các endpoint API chính thức của hệ thống Giờ Vàng TV 
+    để gom trọn vẹn lịch thi đấu hôm nay và ngày mai một cách độc lập.
     """
     timestamp = int(time.time())
     headers = {
@@ -36,41 +36,45 @@ def fetch_independent_matches():
         "Referer": "https://giovang.tax/"
     }
     
-    # Các endpoint API gốc của hệ thống Giờ Vàng
+    # Danh sách các luồng API dự phòng của hệ thống để gom đủ lịch
     api_endpoints = [
         f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}",
         f"https://live-api.keonhacaitp.one/storage/livestream/today.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/schedule.json?t={timestamp}"
+        f"https://live-api.keonhacaitp.one/storage/livestream/schedule.json?t={timestamp}",
+        f"https://live-api.keonhacaitp.one/storage/livestream/list.json?t={timestamp}"
     ]
 
     all_matches = []
-    seen_match_ids = set()
+    seen_ids = set()
 
     for url in api_endpoints:
         try:
-            res = requests.get(url, headers=headers, timeout=8)
+            res = requests.get(url, headers=headers, timeout=6)
             if res.status_code == 200:
                 data = res.json()
                 matches = data.get("response", [])
                 if isinstance(matches, list):
                     for m in matches:
-                        # Tạo khóa định danh duy nhất cho từng trận
-                        m_id = m.get("id") or m.get("fi") or f"{m.get('teams',{}).get('home',{}).get('name')}"
-                        if m_id not in seen_match_ids:
-                            seen_match_ids.add(m_id)
+                        # Lấy mã định danh duy nhất của trận đấu
+                        m_id = m.get("id") or m.get("fi")
+                        home_team = m.get("teams", {}).get("home", {}).get("name", "")
+                        match_key = f"{m_id}_{home_team}"
+                        
+                        if match_key not in seen_ids and home_team:
+                            seen_ids.add(match_key)
                             all_matches.append(m)
-        except Exception as e:
-            print(f"Lỗi khi gọi API {url}: {e}")
+        except Exception:
+            continue
 
     return all_matches
 
 def fetch_and_generate_m3u():
-    matches = fetch_independent_matches()
+    matches = fetch_all_giovang_matches()
     if not matches:
-        print("Không lấy được danh sách trận đấu từ API gốc!")
+        print("Không lấy được dữ liệu từ API gốc!")
         return
 
-    # Sắp xếp ưu tiên: Bóng Đá lên đầu tiên, sau đó sắp xếp theo thời gian
+    # Sắp xếp ưu tiên: Bóng Đá luôn đứng đầu tiên, sau đó sắp xếp theo thời gian
     priority_order = ["football", "basketball", "volleyball", "tennis", "bongban", "badminton"]
     
     def get_sort_key(item):
@@ -110,32 +114,42 @@ def fetch_and_generate_m3u():
         else:
             time_str = f"{match.get('time', '')} {match.get('day_month', '')}".strip()
             match_date = now_vn.date()
+            today_date = now_vn.date()
 
-        # Icon trạng thái trận đấu
+        # Phân biệt trạng thái icon
         is_live = match.get("is_live", False)
         status_code = match.get("status_code", "")
         
         if is_live or status_code == "LIVE":
             status_icon = "🟢 "  # Đang diễn ra
         elif match_date > today_date:
-            status_icon = "📅 "  # Ngày mai
+            status_icon = "📅 "  # Lịch ngày mai
         else:
             status_icon = "⏳ "  # Sắp diễn ra trong ngày
 
         blv_str = format_blv(match.get("blv", []))
         display_title = f"{status_icon}{time_str} {sport_info['emoji']} {home_name} vs {away_name}{blv_str} [hls]"
 
-        # Tự động tạo link stream chuẩn xác từ thông tin định danh trận đấu (fi / id)
-        fi = str(match.get("fi", match.get("id", "")))
-        stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
+        # Trích xuất mã ID luồng phát chuẩn xác từ thông tin trận đấu
+        stream_id = match.get("stream_id") or match.get("room_id")
+        if not stream_id:
+            fi = str(match.get("fi", ""))
+            # Nếu fi là số chuẩn luồng vcdn
+            if fi.isdigit() and len(fi) >= 9:
+                stream_id = fi
+            else:
+                # Nếu fi là mã hex, ưu tiên dùng time_start hoặc id nếu là số
+                t_val = str(match.get("time_start", ""))
+                stream_id = t_val if t_val.isdigit() else match.get("id", "")
 
+        stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{stream_id}_hd/{stream_id}_hd@720p.m3u8"
         group_name = sport_info["group"]
 
-        # Xuất thẻ định dạng M3U
+        # Xuất dòng cấu trúc M3U
         m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="{group_name}" , {display_title}')
         m3u_lines.append(f"{stream_url}\n")
 
-    # Lưu file playlist.m3u hoàn toàn độc lập
+    # Lưu kết quả ra file playlist.m3u
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
