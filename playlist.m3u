@@ -1,19 +1,28 @@
 #EXTM3U
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/gimcheon-sangmu-fc.png" group-title="Bóng Đá" , 🟢 14:30 10/10 ⚽ Gimcheon Sangmu vs FC Anyang (Ty) [hls]
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/gimcheon-sangmu-fc.png" group-title="Bóng Đá" , 🟢 14:30:00 10/10 ⚽ Gimcheon Sangmu vs FC Anyang (Ty) [hls]
 https://ftlh5sc02iliv.vcdn.cloud/1791535992_hd/1791535992_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/arema-fc.png" group-title="Bóng Đá" , 🟢 15:30 10/10 ⚽ Arema Malang vs Bhayangkara Solo FC (Tri) [hls]
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/arema-fc.png" group-title="Bóng Đá" , 🟢 15:30:00 10/10 ⚽ Arema Malang vs Bhayangkara Solo FC (Tri) [hls]
 https://ftlh5sc02iliv.vcdn.cloud/1791618373_hd/1791618373_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/e22caa597076764dd0d04b55d46f764e.png" group-title="Bóng Rổ" , 🟢 14:30 10/10 🏀 Ulsan Hyundai Mobis Phoebus vs Daegu KoGas Pegasus (Cay) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791536131_hd/1791536131_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/e5c63f30ad74c5c5159f1e7695173ae5.png" group-title="Bóng Rổ" , 🟢 15:30 10/10 🏀 South East Melbourne Phoenix vs Melbourne United (Tom) [hls]
+#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/e5c63f30ad74c5c5159f1e7695173ae5.png" group-title="Bóng Rổ" , 🟢 15:30:00 10/10 🏀 South East Melbourne Phoenix vs Melbourne United (Tom) [hls]
 https://ftlh5sc02iliv.vcdn.cloud/1791480907_hd/1791480907_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://en.rolexshanghaimasters.com/-/media/images/tournaments-news/shanghai/2026-highlights/banner1.jpg" group-title="Quần Vợt" , 🟢 11:00 10/10 🥎 Shanghai Open 2 vs Shanghai Open 2 (Mù) [hls]
+#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/e22caa597076764dd0d04b55d46f764e.png" group-title="Bóng Rổ" , 🟢 14:30:00 10/10 🏀 Ulsan Hyundai Mobis Phoebus vs Daegu KoGas Pegasus (Cay) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791536131_hd/1791536131_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://en.rolexshanghaimasters.com/-/media/images/tournaments-news/shanghai/2026-highlights/banner1.jpg" group-title="Quần Vợt" , 🟢 11:00:00 10/10 🥎 Shanghai Open 2 vs Shanghai Open 2 (Blv mù) [hls]
 https://ftlh5sc02iliv.vcdn.cloud/1791561085_hd/1791561085_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/ncDnFmzB-xE40e4KN.png" group-title="Quần Vợt" , 🟢 14:00 10/10 🥎 Mirra Andreeva vs Nikola Bartunkova (Sun) [hls]
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/ncDnFmzB-xE40e4KN.png" group-title="Quần Vợt" , 🟢 14:00:00 10/10 🥎 Mirra Andreeva vs Nikola Bartunkova (Sun) [hls]
 https://ftlh5sc02iliv.vcdn.cloud/1791561268_hd/1791561268_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSKmxOmQyZvLlOuNX8TqsRmAJenqFMIQg5shbXiFonS-w&s=10" group-title="Bóng Bàn" , 🟢 16:00:00 10/10 🏓 WANG Manyu  vs Miwa HARIMOTO (18) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791622800_hd/1791622800_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQXYzk1RBSBGEbrgh2NE-5oEgbLqg1urQV9HPhBSOwlro7RkwZceJD8w9Y&s=10" group-title="Thể Thao Khác" , 🟢 16:00:00 10/10 🏆 NRG  vs LOUD (Diec) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791622800_hd/1791622800_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7Gb3S_hVBxADavywtKLX_sSpJUrlsxbdBeKq6YIXZqQ&s" group-title="Thể Thao Khác" , 🟢 16:00:00 10/10 🏆 F1  vs 2026 (Ngu) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791561085_hd/1791561085_hd@720p.m3u8
