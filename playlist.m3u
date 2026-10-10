@@ -1,25 +1,19 @@
 #EXTM3U
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/gimcheon-sangmu-fc.png" group-title="Bóng Đá" , 🟢 14:30 10/10 ⚽ Gimcheon Sangmu vs FC Anyang (Tỵ) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791535992_hd/1791535992_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/genoa.png" group-title="Bóng Đá" , 🟢 20:00 10/10 ⚽ Genoa vs Fiorentina (Dory) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791635935_hd/1791635935_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/arema-fc.png" group-title="Bóng Đá" , 🟢 15:30 10/10 ⚽ Arema Malang vs Bhayangkara Solo FC (Trĩ) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791618373_hd/1791618373_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/fsv-mainz-05.png" group-title="Bóng Đá" , 🟢 20:30 10/10 ⚽ Mainz vs Bayer Leverkusen (Điếc) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791621951_hd/1791621951_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/persita-tangerang.png" group-title="Bóng Đá" , 🟢 15:30 10/10 ⚽ Persita Tangerang vs Garudayaksa (BLV Hấu) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791618586_hd/1791618586_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/e22caa597076764dd0d04b55d46f764e.png" group-title="Bóng Rổ" , 🟢 14:30 10/10 🏀 Ulsan Hyundai Mobis Phoebus vs Daegu KoGas Pegasus (Cầy) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791536131_hd/1791536131_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/e5c63f30ad74c5c5159f1e7695173ae5.png" group-title="Bóng Rổ" , 🟢 15:30 10/10 🏀 South East Melbourne Phoenix vs Melbourne United (Tôm) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791480907_hd/1791480907_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://en.rolexshanghaimasters.com/-/media/images/tournaments-news/shanghai/2026-highlights/banner1.jpg" group-title="Quần Vợt" , 🟢 11:00 10/10 🥎 Shanghai Open 2 vs Shanghai Open 2 (Mù) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791561085_hd/1791561085_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/augsburg.png" group-title="Bóng Đá" , 🟢 20:30 10/10 ⚽ Augsburg vs Bayern Munich (Ngọng) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791480075_hd/1791480075_hd@720p.m3u8
 
 #EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSKmxOmQyZvLlOuNX8TqsRmAJenqFMIQg5shbXiFonS-w&s=10" group-title="Bóng Bàn" , 🟢 16:00 10/10 🏓 WANG Manyu vs Miwa HARIMOTO (Dory) [hls]
 https://ftlh5sc02iliv.vcdn.cloud/1791619795_hd/1791619795_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7Gb3S_hVBxADavywtKLX_sSpJUrlsxbdBeKq6YIXZqQ&s" group-title="Thể Thao Khác" , 🟢 16:00 10/10 [formula1] F1 vs 2026 (Ngu) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791619949_hd/1791619949_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7Gb3S_hVBxADavywtKLX_sSpJUrlsxbdBeKq6YIXZqQ&s" group-title="Thể Thao Khác" , 🟢 20:00 10/10 [formula1] F1 vs 2026 (Ngu) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791620046_hd/1791620046_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/C8zF3GEG-lG2kTCDf.png" group-title="Thể Thao Khác" , 🟢 20:45 10/10 🎮 Vitality vs Aurora (Tôm) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791619676_hd/1791619676_hd@720p.m3u8
