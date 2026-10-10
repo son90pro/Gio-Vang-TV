@@ -1,0 +1,29 @@
+#EXTM3U x-tvg-url=""
+#EXTINF:-1 group-title="Giờ Vàng TV" tvg-logo="https://giovang.tax/favicon.ico",Updated 10/10 14:17
+#EXTVLCOPT:http-referrer=https://giovang.tax/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+https://giovang.tax/wp-content/themes/GioVang/assets/tvc/tvc_gem88.mp4
+#EXTINF:-1 tvg-id="6abef44024d46db8709078b0" tvg-logo="https://images.keovip88.net/images/teams/avispa-fukuoka.png" group-title="Bóng Đá",🟢 13:00 10/10 ⚽ Avispa Fukuoka vs Okayama FC (Tri) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.tax/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+https://ftlh5sc02iliv.vcdn.cloud/1791612000_hd/1791612000_hd@720p.m3u8
+#EXTINF:-1 tvg-id="6abef44024d46db8709078f4" tvg-logo="https://images.keovip88.net/images/teams/gimcheon-sangmu-fc.png" group-title="Bóng Đá",🟢 14:30 10/10 ⚽ Gimcheon Sangmu vs FC Anyang (Ty) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.tax/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+https://ftlh5sc02iliv.vcdn.cloud/1791617400_hd/1791617400_hd@720p.m3u8
+#EXTINF:-1 tvg-id="23850376" tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/e22caa597076764dd0d04b55d46f764e.png" group-title="Bóng Rổ",🟢 14:30 10/10 🏀 Ulsan Hyundai Mobis Phoebus vs Daegu KoGas Pegasus (Cay) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.tax/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+https://ftlh5sc02iliv.vcdn.cloud/23850376_hd/23850376_hd@720p.m3u8
+#EXTINF:-1 tvg-id="z8dcraggtbhf" tvg-logo="https://en.rolexshanghaimasters.com/-/media/images/tournaments-news/shanghai/2026-highlights/banner1.jpg" group-title="Quần Vợt",🟢 11:00 10/10 🎾 Shanghai Open 1 vs Shanghai Open 1 (Ben) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.tax/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+https://ftlh5sc02iliv.vcdn.cloud/1791604800_hd/1791604800_hd@720p.m3u8
+#EXTINF:-1 tvg-id="29we4c0py349" tvg-logo="https://en.rolexshanghaimasters.com/-/media/images/tournaments-news/shanghai/2026-highlights/banner1.jpg" group-title="Quần Vợt",🟢 11:00 10/10 🎾 Shanghai Open 2 vs Shanghai Open 2 (blv Mù) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.tax/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+https://ftlh5sc02iliv.vcdn.cloud/1791604800_hd/1791604800_hd@720p.m3u8
+#EXTINF:-1 tvg-id="wsaej6wzsbxk" tvg-logo="https://static.flashscore.com/res/image/data/ncDnFmzB-xE40e4KN.png" group-title="Quần Vợt",🟢 14:00 10/10 🎾 Mirra Andreeva vs Nikola Bartunkova (Sun) [hls]
+#EXTVLCOPT:http-referrer=https://giovang.tax/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+https://ftlh5sc02iliv.vcdn.cloud/1791615600_hd/1791615600_hd@720p.m3u8
