@@ -1,22 +1,13 @@
 #EXTM3U
 
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/inter-milan.png" group-title="Bóng Đá" , 🟢 23:00 10/10 ⚽ Inter Milan vs Parma (Ngu) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791643739_hd/1791643739_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/manchester-united.png" group-title="Bóng Đá" , 🟢 23:30 10/10 ⚽ Manchester United vs Tottenham Hotspur (BLV Hấu) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791340579_hd/1791340579_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/manchester-united.png" group-title="Bóng Đá" , 🟢 23:30 10/10 ⚽ Manchester United vs Tottenham Hotspur (Bee) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791340587_hd/1791340587_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/fc-barcelona.png" group-title="Bóng Đá" , 🟢 23:30 10/10 ⚽ Barcelona vs Getafe (Mason) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791340626_hd/1791340626_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/rb-leipzig.png" group-title="Bóng Đá" , 🟢 23:30 10/10 ⚽ RB Leipzig vs Eintracht Frankfurt (Chồn) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791642384_hd/1791642384_hd@720p.m3u8
-
-#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/al-hilal.png" group-title="Bóng Đá" , 🟢 01:00 11/10 ⚽ Al Hilal vs Al Ittihad Jeddah (Súp) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791340698_hd/1791340698_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/GnMnvHhl-UNsdztR4.png" group-title="Bóng Rổ" , 🟢 02:00 11/10 🏀 Breogan vs Basquet Girona (Chồn) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791605042_hd/1791605042_hd@720p.m3u8
 
 #EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/ObrRkAe5-xrMguOa9.png" group-title="Thể Thao Khác" , 🟢 23:59 10/10 🎮 MOUZ vs Spirit (Mickey) [hls]
 https://ftlh5sc02iliv.vcdn.cloud/1791640186_hd/1791640186_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/veYMMiZg-xOybRwL3.png" group-title="Thể Thao Khác" , 🟢 02:30 11/10 [rugby] Texas Longhorns vs Oklahoma Sooners (Riko) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791622529_hd/1791622529_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://middleeasy.com/wp-content/uploads/2026/09/brendan-allen-christian-leroy-duncan-ufc-vegas-122-870x489.jpg" group-title="Thể Thao Khác" , 🟢 04:00 11/10 🥊🥋 Brendan Allen vs. Christian Leroy Duncan vs Brendan Allen vs. Christian Leroy Duncan (Cầy) [hls]
+https://pzhgifbkllliv.vcdn.cloud/1791103892_hd/1791103892_hd@720p.m3u8
