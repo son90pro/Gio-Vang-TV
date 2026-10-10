@@ -1,11 +1,12 @@
 import time
 import requests
+import re
 from datetime import datetime, timezone, timedelta
 
 # Cấu hình múi giờ Việt Nam (UTC+7)
 TZ_VN = timezone(timedelta(hours=7))
 
-# Phân loại bộ môn & Icon nhóm
+# Phân loại nhóm môn thể thao
 SPORT_MAP = {
     "football": {"emoji": "⚽", "group": "Bóng Đá"},
     "basketball": {"emoji": "🏀", "group": "Bóng Rổ"},
@@ -25,56 +26,51 @@ def format_blv(blv_list):
         blv = blv.replace("blv ", "").capitalize()
     return f" ({blv})"
 
-def fetch_all_giovang_matches():
+def get_active_streams_from_site():
     """
-    Truy vấn đồng thời tất cả các endpoint API chính thức của hệ thống Giờ Vàng TV 
-    để gom trọn vẹn lịch thi đấu hôm nay và ngày mai một cách độc lập.
+    Quét trực tiếp trang chủ giovang.tax để lấy toàn bộ link m3u8 đang hoạt động thực tế
     """
-    timestamp = int(time.time())
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://giovang.tax/"
     }
-    
-    # Danh sách các luồng API dự phòng của hệ thống để gom đủ lịch
-    api_endpoints = [
-        f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/today.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/schedule.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/list.json?t={timestamp}"
-    ]
-
-    all_matches = []
-    seen_ids = set()
-
-    for url in api_endpoints:
-        try:
-            res = requests.get(url, headers=headers, timeout=6)
-            if res.status_code == 200:
-                data = res.json()
-                matches = data.get("response", [])
-                if isinstance(matches, list):
-                    for m in matches:
-                        # Lấy mã định danh duy nhất của trận đấu
-                        m_id = m.get("id") or m.get("fi")
-                        home_team = m.get("teams", {}).get("home", {}).get("name", "")
-                        match_key = f"{m_id}_{home_team}"
-                        
-                        if match_key not in seen_ids and home_team:
-                            seen_ids.add(match_key)
-                            all_matches.append(m)
-        except Exception:
-            continue
-
-    return all_matches
+    active_streams = {}
+    try:
+        res = requests.get("https://giovang.tax/", headers=headers, timeout=10)
+        if res.status_code == 200:
+            # Tìm tất cả link .m3u8 chứa vcdn.cloud trên trang
+            found_urls = re.findall(r'https?://[^\s<>"]+vcdn\.cloud[^\s<>"]+\.m3u8', res.text)
+            for u in found_urls:
+                # Trích xuất mã số luồng (ví dụ 1791xxxxxx)
+                m_id = re.search(r'(1791\d+)', u)
+                if m_id:
+                    active_streams[m_id.group(1)] = u
+    except Exception as e:
+        print(f"Lỗi quét trang chủ: {e}")
+        
+    return active_streams
 
 def fetch_and_generate_m3u():
-    matches = fetch_all_giovang_matches()
-    if not matches:
-        print("Không lấy được dữ liệu từ API gốc!")
+    timestamp = int(time.time())
+    api_url = f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://giovang.tax/"
+    }
+
+    try:
+        response = requests.get(api_url, headers=headers, timeout=10)
+        data = response.json()
+        matches = data.get("response", [])
+    except Exception as e:
+        print(f"Lỗi truy vấn API: {e}")
         return
 
-    # Sắp xếp ưu tiên: Bóng Đá luôn đứng đầu tiên, sau đó sắp xếp theo thời gian
+    # Lấy danh sách link stream thật đang phát từ web
+    active_streams = get_active_streams_from_site()
+
+    # Sắp xếp ưu tiên: Bóng Đá lên đầu tiên, sau đó theo thời gian
     priority_order = ["football", "basketball", "volleyball", "tennis", "bongban", "badminton"]
     
     def get_sort_key(item):
@@ -110,46 +106,49 @@ def fetch_and_generate_m3u():
             match_dt = datetime.fromtimestamp(t_start, tz=timezone.utc).astimezone(TZ_VN)
             time_str = match_dt.strftime("%H:%M %d/%m")
             match_date = match_dt.date()
-            today_date = now_vn.date()
         else:
             time_str = f"{match.get('time', '')} {match.get('day_month', '')}".strip()
             match_date = now_vn.date()
-            today_date = now_vn.date()
 
-        # Phân biệt trạng thái icon
         is_live = match.get("is_live", False)
         status_code = match.get("status_code", "")
         
         if is_live or status_code == "LIVE":
-            status_icon = "🟢 "  # Đang diễn ra
-        elif match_date > today_date:
-            status_icon = "📅 "  # Lịch ngày mai
+            status_icon = "🟢 "
+        elif match_date > now_vn.date():
+            status_icon = "📅 "
         else:
-            status_icon = "⏳ "  # Sắp diễn ra trong ngày
+            status_icon = "⏳ "
 
         blv_str = format_blv(match.get("blv", []))
         display_title = f"{status_icon}{time_str} {sport_info['emoji']} {home_name} vs {away_name}{blv_str} [hls]"
 
-        # Trích xuất mã ID luồng phát chuẩn xác từ thông tin trận đấu
-        stream_id = match.get("stream_id") or match.get("room_id")
-        if not stream_id:
-            fi = str(match.get("fi", ""))
-            # Nếu fi là số chuẩn luồng vcdn
-            if fi.isdigit() and len(fi) >= 9:
-                stream_id = fi
+        # Khớp nối link stream chuẩn
+        stream_url = ""
+        fi = str(match.get("fi", match.get("id", "")))
+        
+        # Kiểm tra xem mã fi có khớp với stream active nào không
+        for sid, u in active_streams.items():
+            if sid in fi or fi in sid:
+                stream_url = u
+                break
+        
+        # Nếu chưa khớp trực tiếp nhưng trận đang live, lấy luồng active khả dụng
+        if not stream_url:
+            if active_streams and is_live:
+                stream_url = list(active_streams.values())[0]
             else:
-                # Nếu fi là mã hex, ưu tiên dùng time_start hoặc id nếu là số
-                t_val = str(match.get("time_start", ""))
-                stream_id = t_val if t_val.isdigit() else match.get("id", "")
+                if fi.isdigit() and len(fi) >= 9:
+                    stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
+                else:
+                    stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{t_start}_hd/{t_start}_hd@720p.m3u8"
 
-        stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{stream_id}_hd/{stream_id}_hd@720p.m3u8"
         group_name = sport_info["group"]
 
-        # Xuất dòng cấu trúc M3U
         m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="{group_name}" , {display_title}')
         m3u_lines.append(f"{stream_url}\n")
 
-    # Lưu kết quả ra file playlist.m3u
+    # Lưu tệp playlist.m3u
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
