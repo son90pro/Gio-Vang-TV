@@ -1,17 +1,13 @@
 import requests
 import re
-from bs4 import BeautifulSoup
-from datetime import datetime, timezone, timedelta
 
-TZ_VN = timezone(timedelta(hours=7))
-
-def fetch_playlist_from_web_and_sources():
+def fetch_playlist_from_sources():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://giovang.tax/"
     }
 
-    # 1. Tải danh sách stream active sống 100% từ ttthethao6 (chứa đủ cả lịch trong ngày)
+    # 1. Tải danh sách stream active (chứa đầy đủ các trận trong ngày)
     active_matches = []
     try:
         res = requests.get("https://tinyurl.com/ttthethao6", headers=headers, timeout=10)
@@ -29,7 +25,7 @@ def fetch_playlist_from_web_and_sources():
     except Exception as e:
         print(f"Lỗi tải ttthethao6: {e}")
 
-    # 2. Cào trực tiếp dữ liệu từ API live.json
+    # 2. Cào dữ liệu bổ sung từ API live.json
     try:
         res_api = requests.get("https://live-api.keonhacaitp.one/storage/livestream/live.json", headers=headers, timeout=10)
         if res_api.status_code == 200:
@@ -40,7 +36,6 @@ def fetch_playlist_from_web_and_sources():
                 if not home or not away:
                     continue
                 
-                # Kiểm tra xem trận này đã có trong active_matches chưa
                 already_exists = any(home in m["inf"] or away in m["inf"] for m in active_matches)
                 if not already_exists:
                     stype = item.get("type", "")
@@ -58,7 +53,7 @@ def fetch_playlist_from_web_and_sources():
     except Exception as e:
         print(f"Lỗi cào API: {e}")
 
-    # 3. Phân loại chuẩn nhóm thể thao & Đưa Bóng Đá lên ĐẦU TIÊN
+    # 3. Phân loại nhóm thể thao & Đưa Bóng Đá lên ĐẦU TIÊN
     grouped = {
         "Bóng Đá": [],
         "Bóng Rổ": [],
@@ -83,7 +78,6 @@ def fetch_playlist_from_web_and_sources():
         else:
             grp = "Thể Thao Khác"
 
-        # Đảm bảo group-title chính xác trong thẻ EXTINF
         if 'group-title="' in inf:
             parts = inf.split('group-title="')
             rest = parts[1].split('"', 1)
@@ -93,7 +87,7 @@ def fetch_playlist_from_web_and_sources():
 
         grouped[grp].append({"inf": new_inf, "url": match["url"]})
 
-    # Xuất ra file playlist.m3u
+    # Xuất file playlist.m3u
     display_order = ["Bóng Đá", "Bóng Rổ", "Bóng Chuyền", "Quần Vợt", "Bóng Bàn", "Thể Thao Khác"]
     m3u_lines = ["#EXTM3U\n"]
 
@@ -104,8 +98,8 @@ def fetch_playlist_from_web_and_sources():
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
-    print("Đã tạo thành công playlist.m3u đầy đủ!")
+    print("Đã tạo thành công playlist.m3u!")
 
 if __name__ == "__main__":
-    fetch_playlist_from_web_and_sources()
+    fetch_playlist_from_sources()
     
