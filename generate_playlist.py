@@ -19,13 +19,23 @@ def format_blv(blv_list):
     if not blv_list:
         return ""
     blv = blv_list[0]
-    # Làm sạch tiền tố blv- nếu có
     if blv.startswith("blv-"):
         blv = blv.replace("blv-", "").capitalize()
     return f" ({blv})"
 
+def get_stream_url(match):
+    match_id = match.get("id", "")
+    fi = match.get("fi", match_id)
+    
+    # Nếu fi là số thuần túy hoặc timestamp
+    if str(fi).isdigit():
+        return f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
+    else:
+        # Đối với các mã hex/string, dùng cấu trúc CDN tổng hợp hoặc link dự phòng từ hệ thống
+        # Có thể trích xuất trực tiếp từ chuỗi fi hoặc dùng luồng HLS tương thích
+        return f"https://ftlh5sc02iliv.vcdn.cloud/{fi}/playlist.m3u8"
+
 def fetch_and_generate_m3u():
-    # Thêm timestamp tránh cache API
     timestamp = int(time.time())
     url = f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
     
@@ -42,7 +52,7 @@ def fetch_and_generate_m3u():
         print(f"Lỗi truy vấn API: {e}")
         return
 
-    # Sắp xếp ưu tiên: Bóng đá đứng đầu, các môn khác nối tiếp
+    # Sắp xếp ưu tiên: Bóng đá đứng đầu, các môn khác theo sau
     priority_order = ["football", "basketball", "volleyball", "tennis", "bongban", "badminton"]
     
     def get_sort_key(item):
@@ -65,7 +75,6 @@ def fetch_and_generate_m3u():
         sport_type = match.get("type", "")
         sport_info = SPORT_MAP.get(sport_type, {"emoji": "🏆", "group": "Thể Thao Khác"})
         
-        # Lấy thông tin đội bóng & logo
         teams = match.get("teams", {})
         home = teams.get("home", {})
         away = teams.get("away", {})
@@ -74,7 +83,6 @@ def fetch_and_generate_m3u():
         away_name = away.get("name", "")
         logo = home.get("logo", "") or match.get("league", {}).get("icon", "")
 
-        # Định dạng thời gian theo UTC+7
         time_start = match.get("time_start", 0)
         if time_start:
             match_dt = datetime.fromtimestamp(time_start, tz=timezone.utc).astimezone(TZ_VN)
@@ -82,31 +90,22 @@ def fetch_and_generate_m3u():
         else:
             time_str = f"{match.get('time', '')} {match.get('day_month', '')}".strip()
 
-        # BLV
         blv_str = format_blv(match.get("blv", []))
-
-        # Trạng thái đang diễn ra (chấm xanh)[span_0](start_span)[span_0](end_span)
         is_live = match.get("is_live", False)
         live_dot = "🟢 " if is_live else ""
 
-        # Tên hiển thị chuẩn định dạng mẫu
         display_title = f"{live_dot}{time_str} {sport_info['emoji']} {home_name} vs {away_name}{blv_str} [hls]"
 
-        # ID luồng / Link phát sóng
         match_id = match.get("id", "")
-        
-        # Cấu trúc link stream HLS dự phòng theo luồng thực tế của hệ thống
-        stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{match_id}_hd/{match_id}_hd@720p.m3u8"
-
+        stream_url = get_stream_url(match)
         group_name = sport_info["group"]
 
         m3u_lines.append(f'#EXTINF:-1 tvg-id="{match_id}" tvg-logo="{logo}" group-title="{group_name}",{display_title}')
         m3u_lines.append(stream_url)
 
-    # Ghi nội dung ra file playlist.m3u
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
 if __name__ == "__main__":
     fetch_and_generate_m3u()
-
+    
