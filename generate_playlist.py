@@ -1,44 +1,36 @@
-import time
 import requests
-import re
-from datetime import datetime, timezone, timedelta
-
-TZ_VN = timezone(timedelta(hours=7))
-
-def get_real_stream_url(detail_slug):
-    """ Truyen cập vào trang chi tiết trận đấu trên giovang.tax để bóc lấy Session ID 1791xxxxxx thực sự """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://giovang.tax/"
-    }
-    url = f"https://giovang.tax/{detail_slug}"
-    try:
-        res = requests.get(url, headers=headers, timeout=5)
-        if res.status_code == 200:
-            # Tìm chuỗi chứa link vcdn.cloud có dạng 1791xxxxxx
-            match = re.search(r'https?://[^\s<>"]+vcdn\.cloud/[^\s<>"]*(1791\d+)[^\s<>"]*\.m3u8', res.text)
-            if match:
-                sid = match.group(1)
-                return f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8"
-    except Exception:
-        pass
-    return None
 
 def fetch_and_generate_m3u():
-    timestamp = int(time.time())
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://giovang.tax/"
-    }
-
-    # Lấy danh sách trận từ API chính thức
+    source_url = "https://tinyurl.com/ttthethao6"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
     try:
-        res = requests.get(f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}", headers=headers, timeout=8)
-        matches = res.json().get("response", [])
+        res = requests.get(source_url, headers=headers, timeout=10)
+        if res.status_code != 200:
+            print("Không tải được dữ liệu từ nguồn!")
+            return
+        lines = res.text.splitlines()
     except Exception as e:
-        print(f"Lỗi API: {e}")
+        print(f"Lỗi kết nối: {e}")
         return
 
+    channels = []
+    current_inf = ""
+    
+    # Đọc và bóc tách danh sách các trận đấu đang phát sóng
+    for line in lines:
+        line = line.strip()
+        if line.startswith("#EXTINF"):
+            current_inf = line
+        elif line.startswith("http") and "vcdn.cloud" in line:
+            if current_inf:
+                channels.append({
+                    "inf": current_inf,
+                    "url": line
+                })
+                current_inf = ""
+
+    # Phân nhóm các môn thể thao và ưu tiên Bóng Đá lên đầu
     grouped = {
         "Bóng Đá": [],
         "Bóng Rổ": [],
@@ -48,55 +40,44 @@ def fetch_and_generate_m3u():
         "Thể Thao Khác": []
     }
 
-    for m in matches:
-        teams = m.get("teams", {})
-        home = teams.get("home", {}).get("name", "")
-        away = teams.get("away", {}).get("name", "")
-        if not home or not away:
-            continue
-
-        stype = m.get("type", "")
-        logo = teams.get("home", {}).get("logo", "") or m.get("league", {}).get("icon", "")
-        time_str = m.get("time", "")
-        blv = m.get("blv", [])
-        blv_str = f" ({blv[0].replace('blv-', '').capitalize()})" if blv else ""
-
-        # Xác định nhóm
-        if stype == "football":
-            group, emoji = "Bóng Đá", "⚽"
-        elif stype == "basketball":
-            group, emoji = "Bóng Rổ", "🏀"
-        elif stype == "volleyball":
-            group, emoji = "Bóng Chuyền", "🏐"
-        elif stype in ["tennis", "bongban"]:
-            group = "Quần Vợt" if stype == "tennis" else "Bóng Bàn"
-            emoji = "🥎" if stype == "tennis" else "🏓"
+    for ch in channels:
+        inf = ch["inf"]
+        if "⚽" in inf:
+            group = "Bóng Đá"
+        elif "🏀" in inf:
+            group = "Bóng Rổ"
+        elif "🏐" in inf:
+            group = "Bóng Chuyền"
+        elif "🥎" in inf or "🎾" in inf:
+            group = "Quần Vợt"
+        elif "🏓" in inf:
+            group = "Bóng Bàn"
         else:
-            group, emoji = "Thể Thao Khác", "🏆"
+            group = "Thể Thao Khác"
 
-        title = f'#EXTINF:-1 tvg-logo="{logo}" group-title="{group}" , 🟢 {time_str} {emoji} {home} vs {away}{blv_str} [hls]'
-
-        # Bóc tách link stream thực tế 100% tự chủ
-        slug = m.get("slug") or f"truc-tiep-{home.lower().replace(' ', '-')}-vs-{away.lower().replace(' ', '-')}"
-        stream_url = get_real_stream_url(slug)
+        # Gán group-title chuẩn để ứng dụng IPTV tự động phân loại giao diện
+        if 'group-title="' in inf:
+            parts = inf.split('group-title="')
+            if len(parts) > 1:
+                rest = parts[1].split('"', 1)
+                ch["inf"] = f'{parts[0]}group-title="{group}"{rest[1]}'
         
-        # Nếu chưa bóc được (do trận chưa lên sóng), mới dùng link đệm fi
-        if not stream_url:
-            fi = str(m.get("fi", m.get("id", "")))
-            stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
+        grouped[group].append(ch)
 
-        grouped[group].append({"inf": title, "url": stream_url})
-
-    # Sắp xếp Bóng Đá lên đầu
+    # Thứ tự hiển thị các nhóm trên tivi (Bóng Đá luôn ở vị trí đầu tiên)
     display_order = ["Bóng Đá", "Bóng Rổ", "Bóng Chuyền", "Quần Vợt", "Bóng Bàn", "Thể Thao Khác"]
+
     m3u_lines = ["#EXTM3U\n"]
-    for grp in display_order:
-        for ch in grouped.get(grp, []):
+    for group in display_order:
+        for ch in grouped.get(group, []):
             m3u_lines.append(ch["inf"])
             m3u_lines.append(ch["url"] + "\n")
 
+    # Lưu kết quả ra tệp playlist.m3u
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
+    print(f"Đã cập nhật playlist thành công với {len(channels)} kênh!")
 
 if __name__ == "__main__":
     fetch_and_generate_m3u()
+    
