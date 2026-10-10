@@ -5,60 +5,40 @@ from datetime import datetime, timezone, timedelta
 
 TZ_VN = timezone(timedelta(hours=7))
 
-def fetch_independent_playlist():
+def get_real_stream_url(detail_slug):
+    """ Truyen cập vào trang chi tiết trận đấu trên giovang.tax để bóc lấy Session ID 1791xxxxxx thực sự """
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://giovang.tax/"
     }
-    
-    all_matches = []
-    seen_keys = set()
-
-    # 1. Truy vấn các endpoint API chính thức của hệ thống Giờ Vàng TV
-    timestamp = int(time.time())
-    api_endpoints = [
-        f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/today.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/schedule.json?t={timestamp}"
-    ]
-
-    for url in api_endpoints:
-        try:
-            res = requests.get(url, headers=headers, timeout=8)
-            if res.status_code == 200:
-                data = res.json()
-                matches = data.get("response", [])
-                if isinstance(matches, list):
-                    for m in matches:
-                        teams = m.get("teams", {})
-                        home = teams.get("home", {}).get("name", "").strip()
-                        away = teams.get("away", {}).get("name", "").strip()
-                        if home and away:
-                            key = f"{home}_vs_{away}"
-                            if key not in seen_keys:
-                                seen_keys.add(key)
-                                all_matches.append(m)
-        except Exception:
-            continue
-
-    # 2. Cào trực tiếp từ trang chủ giovang.tax để vét sạch các trận ở tab Sắp diễn ra nếu API thiếu
+    url = f"https://giovang.tax/{detail_slug}"
     try:
-        res_web = requests.get("https://giovang.tax/", headers=headers, timeout=10)
-        if res_web.status_code == 200:
-            html = res_web.text
-            # Tìm kiếm các chuỗi JSON hoặc thông tin trận đấu được render sẵn trong HTML
-            # (Hệ thống tự động bóc tách các đội bóng xuất hiện trên trang)
-            found_teams = re.findall(r'name["\s:]+["\']([^"\']+)["\']', html)
-            # Logic dự phòng nếu cần bổ sung
+        res = requests.get(url, headers=headers, timeout=5)
+        if res.status_code == 200:
+            # Tìm chuỗi chứa link vcdn.cloud có dạng 1791xxxxxx
+            match = re.search(r'https?://[^\s<>"]+vcdn\.cloud/[^\s<>"]*(1791\d+)[^\s<>"]*\.m3u8', res.text)
+            if match:
+                sid = match.group(1)
+                return f"https://ftlh5sc02iliv.vcdn.cloud/{sid}_hd/{sid}_hd@720p.m3u8"
     except Exception:
         pass
+    return None
 
-    return all_matches
+def fetch_and_generate_m3u():
+    timestamp = int(time.time())
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://giovang.tax/"
+    }
 
-def generate_m3u():
-    matches = fetch_independent_playlist()
-    
-    # Phân nhóm môn thể thao, ưu tiên Bóng Đá lên hàng đầu
+    # Lấy danh sách trận từ API chính thức
+    try:
+        res = requests.get(f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}", headers=headers, timeout=8)
+        matches = res.json().get("response", [])
+    except Exception as e:
+        print(f"Lỗi API: {e}")
+        return
+
     grouped = {
         "Bóng Đá": [],
         "Bóng Rổ": [],
@@ -68,70 +48,55 @@ def generate_m3u():
         "Thể Thao Khác": []
     }
 
-    for match in matches:
-        stype = match.get("type", "")
-        teams = match.get("teams", {})
-        home = teams.get("home", {}).get("name", "").strip()
-        away = teams.get("away", {}).get("name", "").strip()
+    for m in matches:
+        teams = m.get("teams", {})
+        home = teams.get("home", {}).get("name", "")
+        away = teams.get("away", {}).get("name", "")
         if not home or not away:
             continue
 
-        logo = teams.get("home", {}).get("logo", "") or match.get("league", {}).get("icon", "")
-        time_str = match.get("time", "")
-        day_month = match.get("day_month", "")
-        t_display = f"{time_str} {day_month}".strip() or "Hôm nay"
+        stype = m.get("type", "")
+        logo = teams.get("home", {}).get("logo", "") or m.get("league", {}).get("icon", "")
+        time_str = m.get("time", "")
+        blv = m.get("blv", [])
+        blv_str = f" ({blv[0].replace('blv-', '').capitalize()})" if blv else ""
 
-        is_live = match.get("is_live", False)
-        status_code = match.get("status_code", "")
-        if is_live or status_code == "LIVE":
-            status_icon = "🟢 "
+        # Xác định nhóm
+        if stype == "football":
+            group, emoji = "Bóng Đá", "⚽"
+        elif stype == "basketball":
+            group, emoji = "Bóng Rổ", "🏀"
+        elif stype == "volleyball":
+            group, emoji = "Bóng Chuyền", "🏐"
+        elif stype in ["tennis", "bongban"]:
+            group = "Quần Vợt" if stype == "tennis" else "Bóng Bàn"
+            emoji = "🥎" if stype == "tennis" else "🏓"
         else:
-            status_icon = "⏳ "
+            group, emoji = "Thể Thao Khác", "🏆"
 
-        blv_list = match.get("blv", [])
-        blv_str = f" ({blv_list[0].replace('blv-', '').capitalize()})" if blv_list else ""
+        title = f'#EXTINF:-1 tvg-logo="{logo}" group-title="{group}" , 🟢 {time_str} {emoji} {home} vs {away}{blv_str} [hls]'
 
-        # Phân loại nhóm môn thể thao chuẩn xác
-        if "football" in stype or "⚽" in stype:
-            group = "Bóng Đá"
-            emoji = "⚽"
-        elif "basketball" in stype or "🏀" in stype:
-            group = "Bóng Rổ"
-            emoji = "🏀"
-        elif "volleyball" in stype or "🏐" in stype:
-            group = "Bóng Chuyền"
-            emoji = "🏐"
-        elif any(k in stype for k in ["tennis", "bongban", "badminton", "🥎", "🎾", "🏓", "🏸"]):
-            group = "Quần Vợt" if "tennis" in stype else "Bóng Bàn"
-            emoji = "🥎" if "tennis" in stype else "🏓"
-        else:
-            group = "Thể Thao Khác"
-            emoji = "🏆"
-
-        display_title = f"{status_icon}{t_display} {emoji} {home} vs {away}{blv_str} [hls]"
-
-        fi = str(match.get("fi", match.get("id", "")))
-        if fi.isdigit() and len(fi) >= 9:
-            stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
-        else:
+        # Bóc tách link stream thực tế 100% tự chủ
+        slug = m.get("slug") or f"truc-tiep-{home.lower().replace(' ', '-')}-vs-{away.lower().replace(' ', '-')}"
+        stream_url = get_real_stream_url(slug)
+        
+        # Nếu chưa bóc được (do trận chưa lên sóng), mới dùng link đệm fi
+        if not stream_url:
+            fi = str(m.get("fi", m.get("id", "")))
             stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
 
-        inf_line = f'#EXTINF:-1 tvg-logo="{logo}" group-title="{group}" , {display_title}'
-        grouped[group].append({"inf": inf_line, "url": stream_url})
+        grouped[group].append({"inf": title, "url": stream_url})
 
-    # Thứ tự hiển thị ưu tiên (Bóng Đá luôn đứng đầu)
+    # Sắp xếp Bóng Đá lên đầu
     display_order = ["Bóng Đá", "Bóng Rổ", "Bóng Chuyền", "Quần Vợt", "Bóng Bàn", "Thể Thao Khác"]
     m3u_lines = ["#EXTM3U\n"]
-    
     for grp in display_order:
-        for item in grouped.get(grp, []):
-            m3u_lines.append(item["inf"])
-            m3u_lines.append(item["url"] + "\n")
+        for ch in grouped.get(grp, []):
+            m3u_lines.append(ch["inf"])
+            m3u_lines.append(ch["url"] + "\n")
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
-    print("Đã tạo playlist độc lập thành công!")
 
 if __name__ == "__main__":
-    generate_m3u()
-    
+    fetch_and_generate_m3u()
