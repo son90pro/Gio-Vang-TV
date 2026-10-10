@@ -28,7 +28,7 @@ def format_blv(blv_list):
 def fetch_m3u_from_source():
     """ Tải danh sách stream thực tế từ ttthethao6 """
     source_url = "https://tinyurl.com/ttthethao6"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
     stream_map = {}
     try:
@@ -49,51 +49,26 @@ def fetch_m3u_from_source():
         
     return stream_map
 
-def fetch_all_matches():
-    """ Gọi đồng thời nhiều endpoint API để gom đủ trận Live, Hôm nay và Ngày mai """
+def fetch_and_generate_m3u():
     timestamp = int(time.time())
+    url = f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Referer": "https://giovang.tax/"
     }
-    
-    # Danh sách các API chứa lịch thi đấu của hệ thống Giờ Vàng
-    api_urls = [
-        f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/today.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/next.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/schedule.json?t={timestamp}"
-    ]
 
-    all_matches = []
-    seen_ids = set()
-
-    for url in api_urls:
-        try:
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                data = res.json()
-                matches = data.get("response", [])
-                if isinstance(matches, list):
-                    for m in matches:
-                        m_id = m.get("id") or m.get("fi") or f"{m.get('teams',{}).get('home',{}).get('name')}_{m.get('time_start')}"
-                        if m_id not in seen_ids:
-                            seen_ids.add(m_id)
-                            all_matches.append(m)
-        except Exception:
-            continue
-
-    return all_matches
-
-def fetch_and_generate_m3u():
-    matches = fetch_all_matches()
-    source_streams = fetch_m3u_from_source()
-
-    if not matches:
-        print("Không lấy được dữ liệu trận đấu!")
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        data = response.json()
+        matches = data.get("response", [])
+    except Exception as e:
+        print(f"Lỗi truy vấn API: {e}")
         return
 
-    # Sắp xếp ưu tiên: Bóng Đá đứng đầu -> Các môn khác theo sau
+    source_streams = fetch_m3u_from_source()
+
+    # Sắp xếp ưu tiên môn thể thao: Bóng Đá đứng đầu tiên
     priority_order = ["football", "basketball", "volleyball", "tennis", "bongban", "badminton"]
     
     def get_sort_key(item):
@@ -123,7 +98,7 @@ def fetch_and_generate_m3u():
 
         logo = home.get("logo", "") or match.get("league", {}).get("icon", "")
 
-        # Múi giờ Việt Nam
+        # Định dạng thời gian múi giờ Việt Nam
         t_start = match.get("time_start", 0)
         if t_start:
             match_dt = datetime.fromtimestamp(t_start, tz=timezone.utc).astimezone(TZ_VN)
@@ -132,9 +107,9 @@ def fetch_and_generate_m3u():
             today_date = now_vn.date()
         else:
             time_str = f"{match.get('time', '')} {match.get('day_month', '')}".strip()
-            match_date = today_date
+            match_date = now_vn.date()
 
-        # Phân biệt icon trạng thái
+        # Phân biệt icon trạng thái (Đang diễn ra, Hôm nay, Ngày mai)
         is_live = match.get("is_live", False)
         status_code = match.get("status_code", "")
         
@@ -148,14 +123,14 @@ def fetch_and_generate_m3u():
         blv_str = format_blv(match.get("blv", []))
         display_title = f"{status_icon}{time_str} {sport_info['emoji']} {home_name} vs {away_name}{blv_str} [hls]"
 
-        # Khớp link stream thực tế
+        # 1. Ưu tiên ghép link stream 1791xxxxxx từ ttthethao6
         stream_url = ""
         for title_key, url_val in source_streams.items():
             if home_name in title_key or away_name in title_key:
                 stream_url = url_val
                 break
         
-        # Link dự phòng nếu chưa có trên luồng live
+        # 2. BẮT BUỘC DỰNG LINK CHỜ cho các trận chưa Live
         if not stream_url:
             fi = str(match.get("fi", match.get("id", "")))
             stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
