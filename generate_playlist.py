@@ -10,7 +10,7 @@ SPORT_MAP = {
     "football": {"emoji": "⚽", "group": "Bóng Đá"},
     "basketball": {"emoji": "🏀", "group": "Bóng Rổ"},
     "volleyball": {"emoji": "🏐", "group": "Bóng Chuyền"},
-    "tennis": {"emoji": "🎾", "group": "Quần Vợt"},
+    "tennis": {"emoji": "🥎", "group": "Quần Vợt"},
     "bongban": {"emoji": "🏓", "group": "Bóng Bàn"},
     "badminton": {"emoji": "🏸", "group": "Cầu Lông"},
 }
@@ -21,22 +21,42 @@ def format_blv(blv_list):
     blv = blv_list[0]
     if blv.startswith("blv-"):
         blv = blv.replace("blv-", "").capitalize()
+    elif blv.startswith("blv "):
+        blv = blv.replace("blv ", "").capitalize()
     return f" ({blv})"
 
-def build_stream_url(match):
-    # Ưu tiên lấy theo fi/time_start
-    fi = match.get("fi", "")
-    time_start = match.get("time_start", "")
+def get_real_stream_id(match):
+    """
+    Hàm lấy ID luồng video thực tế (dạng 1791xxxxxx).
+    Nếu API có trả về stream_id hoặc fi dạng số thực thì dùng, 
+    ngược lại sẽ gọi API detail của trận để lấy chính xác stream_id.
+    """
+    match_id = match.get("id", "")
+    fi = str(match.get("fi", ""))
+    
+    # Check nếu fi hoặc id đã là chuỗi số luồng thực (ví dụ bắt đầu bằng 1791...)
+    if fi.isdigit() and len(fi) >= 9:
+        return fi
+    
+    # Nếu là mã chuỗi hex, thực hiện request lấy chi tiết phòng stream
+    try:
+        detail_url = f"https://live-api.keonhacaitp.one/storage/livestream/detail/{match_id}.json"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://giovang.tax/"
+        }
+        res = requests.get(detail_url, headers=headers, timeout=3)
+        if res.status_code == 200:
+            d_data = res.json()
+            # Tìm ID stream thực tế trong response chi tiết
+            stream_id = d_data.get("response", {}).get("stream_id") or d_data.get("response", {}).get("room_id")
+            if stream_id:
+                return str(stream_id)
+    except Exception:
+        pass
 
-    # Nếu fi là chuỗi số thuần túy
-    if str(fi).isdigit():
-        stream_id = fi
-    elif str(time_start).isdigit():
-        stream_id = time_start
-    else:
-        stream_id = match.get("id", "")
-
-    return f"https://ftlh5sc02iliv.vcdn.cloud/{stream_id}_hd/{stream_id}_hd@720p.m3u8"
+    # Trường hợp fallback dự phòng
+    return fi if fi.isdigit() else str(match.get("time_start", ""))
 
 def fetch_and_generate_m3u():
     timestamp = int(time.time())
@@ -55,7 +75,7 @@ def fetch_and_generate_m3u():
         print(f"Lỗi truy vấn API: {e}")
         return
 
-    # Sắp xếp ưu tiên: Bóng đá đứng đầu, các môn khác nối tiếp
+    # Ưu tiên sắp xếp: Bóng đá -> Bóng rổ -> Bóng chuyền -> Quần vợt -> Bóng bàn
     priority_order = ["football", "basketball", "volleyball", "tennis", "bongban", "badminton"]
     
     def get_sort_key(item):
@@ -66,19 +86,11 @@ def fetch_and_generate_m3u():
 
     matches.sort(key=get_sort_key)
 
-    m3u_lines = ['#EXTM3U x-tvg-url=""']
-
-    # Dòng tiêu đề cập nhật thời gian
-    now_vn = datetime.now(TZ_VN)
-    updated_str = now_vn.strftime("%d/%m %H:%M")
-    m3u_lines.append(f'#EXTINF:-1 group-title="Giờ Vàng TV" tvg-logo="https://giovang.tax/favicon.ico",Updated {updated_str}')
-    m3u_lines.append("#EXTVLCOPT:http-referrer=https://giovang.tax/")
-    m3u_lines.append("#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-    m3u_lines.append("https://giovang.tax/wp-content/themes/GioVang/assets/tvc/tvc_gem88.mp4")
+    m3u_lines = ["#EXTM3U\n"]
 
     for match in matches:
         sport_type = match.get("type", "")
-        sport_info = SPORT_MAP.get(sport_type, {"emoji": "🏆", "group": "Thể Thao Khác"})
+        sport_info = SPORT_MAP.get(sport_type, {"emoji": "🏆", "group": "Giờ Vàng TV"})
         
         teams = match.get("teams", {})
         home = teams.get("home", {})
@@ -88,7 +100,7 @@ def fetch_and_generate_m3u():
         away_name = away.get("name", "")
         logo = home.get("logo", "") or match.get("league", {}).get("icon", "")
 
-        # Múi giờ VN
+        # Định dạng thời gian múi giờ Việt Nam (UTC+7)
         t_start = match.get("time_start", 0)
         if t_start:
             match_dt = datetime.fromtimestamp(t_start, tz=timezone.utc).astimezone(TZ_VN)
@@ -100,18 +112,20 @@ def fetch_and_generate_m3u():
         is_live = match.get("is_live", False)
         live_dot = "🟢 " if is_live else ""
 
+        # Tiêu đề hiển thị chuẩn 100% theo mẫu M3U của anh
         display_title = f"{live_dot}{time_str} {sport_info['emoji']} {home_name} vs {away_name}{blv_str} [hls]"
 
-        match_id = match.get("id", "")
-        stream_url = build_stream_url(match)
+        # Lấy chính xác ID luồng phát
+        stream_id = get_real_stream_id(match)
+        stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{stream_id}_hd/{stream_id}_hd@720p.m3u8"
+        
+        # Nhóm danh sách kênh theo yêu cầu của anh (Bóng đá đứng đầu)
         group_name = sport_info["group"]
 
-        # Xuất thẻ EXTF INF cùng tham số Header chống chặn Referer
-        m3u_lines.append(f'#EXTINF:-1 tvg-id="{match_id}" tvg-logo="{logo}" group-title="{group_name}",{display_title}')
-        m3u_lines.append("#EXTVLCOPT:http-referrer=https://giovang.tax/")
-        m3u_lines.append("#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        m3u_lines.append(stream_url)
+        m3u_lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="{group_name}" , {display_title}')
+        m3u_lines.append(f"{stream_url}\n")
 
+    # Xuất file playlist.m3u
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
 
