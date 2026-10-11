@@ -1,13 +1,31 @@
 #EXTM3U
 
-#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/GnMnvHhl-UNsdztR4.png" group-title="Bóng Rổ" , 🟢 02:00 11/10 🏀 Breogan vs Basquet Girona (Chồn) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791605042_hd/1791605042_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/inter-miami-cf.png" group-title="Bóng Đá" , 🟢 06:30 11/10 ⚽ Inter Miami vs Washington D.C. United (Ngọng) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791340817_hd/1791340817_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/ObrRkAe5-xrMguOa9.png" group-title="Thể Thao Khác" , 🟢 23:59 10/10 🎮 MOUZ vs Spirit (Mickey) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791640186_hd/1791640186_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://images.keovip88.net/images/teams/new-york-red-bulls.png" group-title="Bóng Đá" , 🟢 06:30 11/10 ⚽ New York Red Bulls vs San Diego FC (BLV Hấu) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791340847_hd/1791340847_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/veYMMiZg-xOybRwL3.png" group-title="Thể Thao Khác" , 🟢 02:30 11/10 [rugby] Texas Longhorns vs Oklahoma Sooners (Riko) [hls]
-https://ftlh5sc02iliv.vcdn.cloud/1791622529_hd/1791622529_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/f4a3bba0c74c9f2b90bc5861ec26e3c7.png" group-title="Bóng Rổ" , 🟢 06:00 11/10 🏀 Washington Wizards vs Detroit Pistons (Mickey) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791645699_hd/1791645699_hd@720p.m3u8
 
-#EXTINF:-1 tvg-logo="https://middleeasy.com/wp-content/uploads/2026/09/brendan-allen-christian-leroy-duncan-ufc-vegas-122-870x489.jpg" group-title="Thể Thao Khác" , 🟢 04:00 11/10 🥊🥋 Brendan Allen vs. Christian Leroy Duncan vs Brendan Allen vs. Christian Leroy Duncan (Cầy) [hls]
-https://pzhgifbkllliv.vcdn.cloud/1791103892_hd/1791103892_hd@720p.m3u8
+#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/3a8c9a8a304f078913c60b52698ab585.png" group-title="Bóng Rổ" , 🟢 06:00 11/10 🏀 Indiana Pacers vs Atlanta Hawks (Ben) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791643281_hd/1791643281_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/ef37e5c1c853e5b689b6791b00e8bc58.png" group-title="Bóng Rổ" , 🟢 07:00 11/10 🏀 Boston Celtics vs Philadelphia 76ers (Vịt) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791675538_hd/1791675538_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/43ebb4d6ad3ea5b68e9b1c969dff055b.png" group-title="Bóng Rổ" , 🟢 07:00 11/10 🏀 Miami Heat vs Minnesota Timberwolves (Chồn) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791616186_hd/1791616186_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://cdn.keobongvip.digital/images/basketball-teams/c7341a14964f12885ea2ae80b76cebe8.png" group-title="Bóng Rổ" , 🟢 07:30 11/10 🏀 Golden State Warriors vs Sacramento Kings (Tôm) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791645742_hd/1791645742_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://middleeasy.com/wp-content/uploads/2026/09/brendan-allen-christian-leroy-duncan-ufc-vegas-122-870x489.jpg" group-title="Thể Thao Khác" , 🟢 04:00 11/10 🥊🥋 Brendan Allen vs Christian Leroy Duncan (Cầy) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791103892_hd/1791103892_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/hlTw5ghl-6JXWGttI.png" group-title="Thể Thao Khác" , 🟢 06:30 11/10 🏈 Alabama Crimson Tide vs Georgia Bulldogs (Riko) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791622952_hd/1791622952_hd@720p.m3u8
+
+#EXTINF:-1 tvg-logo="https://static.flashscore.com/res/image/data/CMe9zXzS-QNrz0V5B.png" group-title="Thể Thao Khác" , 🟢 07:00 11/10 ⚾ Cleverland Guardians vs Chicago White Sox (Ngu) [hls]
+https://ftlh5sc02iliv.vcdn.cloud/1791617303_hd/1791617303_hd@720p.m3u8
