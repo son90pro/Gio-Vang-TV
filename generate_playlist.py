@@ -55,22 +55,17 @@ def fetch_and_generate_m3u():
         blv = match.get("blv", [])
         blv_str = f" ({blv[0].replace('blv-', '').capitalize()})" if blv else ""
 
-        # Lấy trực tiếp mã fi hoặc session từ dữ liệu trận đấu trong API
-        fi = str(match.get("fi", match.get("id", "")))
-        
-        # Kiểm tra xem đối tượng trận đấu có chứa sẵn link hoặc mã session động không
+        # Quét toàn bộ các trường có thể chứa ID hoặc link trong đối tượng match
         stream_url = ""
-        match_str_data = str(match)
-        
-        # Quét tìm kiếm chuỗi vcdn.cloud hoặc .m3u8 nếu có ẩn trong dữ liệu JSON của trận
-        url_match = re.search(r'(https?://[^\s<>"]+vcdn\.cloud/[^\s<>"]+\.m3u8)', match_str_data)
+        match_str = str(match)
+        url_match = re.search(r'(https?://[^\s<>"]+vcdn\.cloud/[^\s<>"]+\.m3u8)', match_str)
         if url_match:
             stream_url = url_match.group(1).replace('\\/', '/')
         else:
-            # Nếu trận đang LIVE, dựng chuẩn URL session động theo đúng định dạng anh vừa bắt được ở tab Media
-            if is_live or status_code == "LIVE":
-                # Thử sử dụng chính mã fi làm session động chuẩn xác
-                stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
+            # Lấy bất kỳ mã định danh nào có sẵn trong dict của trận đấu
+            match_id = match.get("fi") or match.get("id") or match.get("match_id") or ""
+            if match_id and (is_live or status_code == "LIVE"):
+                stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{match_id}_hd/{match_id}_hd@720p.m3u8"
             else:
                 continue
 
@@ -99,7 +94,6 @@ def fetch_and_generate_m3u():
         })
         total_channels += 1
 
-    # Thứ tự hiển thị ưu tiên (Bóng Đá đứng đầu)
     display_order = ["Bóng Đá", "Bóng Rổ", "Bóng Chuyền", "Quần Vợt", "Bóng Bàn", "Thể Thao Khác"]
     m3u_lines = ["#EXTM3U\n"]
 
@@ -110,7 +104,7 @@ def fetch_and_generate_m3u():
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
-    print(f"Đã tạo playlist độc lập thành công với {total_channels} kênh!")
+    print(f"Đã tạo playlist thành công với {total_channels} kênh!")
 
 if __name__ == "__main__":
     fetch_and_generate_m3u()
