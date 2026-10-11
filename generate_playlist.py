@@ -5,63 +5,19 @@ from datetime import datetime, timezone, timedelta
 
 TZ_VN = timezone(timedelta(hours=7))
 
-def get_live_stream_url(match_item):
-    """ Trích xuất hoặc dò tìm link .m3u8 chứa session động từ dữ liệu trận đấu """
-    # Kiểm tra xem API có sẵn link hay không
-    for key in ["stream_url", "link", "url", "hls"]:
-        val = match_item.get(key)
-        if val and isinstance(val, str) and "m3u8" in val:
-            return val.replace('\\/', '/')
-            
-    # Nếu không có sẵn, lấy mã định danh fi hoặc id để gọi API chi tiết
-    fi = str(match_item.get("fi", match_item.get("id", "")))
-    if not fi:
-        return None
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://giovang.tax/"
-    }
-    
-    endpoints = [
-        f"https://live-api.keonhacaitp.one/storage/livestream/match.json?fi={fi}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/detail.json?fi={fi}"
-    ]
-
-    for url in endpoints:
-        try:
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                text_data = res.text
-                # Quét tìm kiếm chuỗi .m3u8 hoặc vcdn.cloud xuất hiện trong phản hồi JSON/HTML
-                match = re.search(r'(https?://[^\s<>"]+vcdn\.cloud/[^\s<>"]+\.m3u8)', text_data)
-                if match:
-                    return match.group(1).replace('&quot;', '').replace('\\/', '/')
-        except Exception:
-            continue
-            
-    # Fallback theo chuẩn session động nếu trận đang phát sóng trực tiếp (LIVE)
-    is_live = match_item.get("is_live", False)
-    status_code = match_item.get("status_code", "")
-    if is_live or status_code == "LIVE":
-        # Sử dụng fi làm mã định danh luồng trực tiếp
-        return f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
-        
-    return None
-
 def fetch_and_generate_m3u():
     timestamp = int(time.time())
     api_url = f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://giovang.tax/"
     }
 
     try:
         res = requests.get(api_url, headers=headers, timeout=10)
         if res.status_code != 200:
-            print("Không tải được danh sách từ API chính!")
+            print("Không tải được API chính!")
             return
         matches = res.json().get("response", [])
     except Exception as e:
@@ -99,8 +55,25 @@ def fetch_and_generate_m3u():
         blv = match.get("blv", [])
         blv_str = f" ({blv[0].replace('blv-', '').capitalize()})" if blv else ""
 
-        # Lấy link stream chuẩn xác có chứa session động
-        stream_url = get_live_stream_url(match)
+        # Lấy trực tiếp mã fi hoặc session từ dữ liệu trận đấu trong API
+        fi = str(match.get("fi", match.get("id", "")))
+        
+        # Kiểm tra xem đối tượng trận đấu có chứa sẵn link hoặc mã session động không
+        stream_url = ""
+        match_str_data = str(match)
+        
+        # Quét tìm kiếm chuỗi vcdn.cloud hoặc .m3u8 nếu có ẩn trong dữ liệu JSON của trận
+        url_match = re.search(r'(https?://[^\s<>"]+vcdn\.cloud/[^\s<>"]+\.m3u8)', match_str_data)
+        if url_match:
+            stream_url = url_match.group(1).replace('\\/', '/')
+        else:
+            # Nếu trận đang LIVE, dựng chuẩn URL session động theo đúng định dạng anh vừa bắt được ở tab Media
+            if is_live or status_code == "LIVE":
+                # Thử sử dụng chính mã fi làm session động chuẩn xác
+                stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
+            else:
+                continue
+
         if not stream_url:
             continue
 
@@ -126,7 +99,7 @@ def fetch_and_generate_m3u():
         })
         total_channels += 1
 
-    # Sắp xếp hiển thị ưu tiên (Bóng Đá lên đầu)
+    # Thứ tự hiển thị ưu tiên (Bóng Đá đứng đầu)
     display_order = ["Bóng Đá", "Bóng Rổ", "Bóng Chuyền", "Quần Vợt", "Bóng Bàn", "Thể Thao Khác"]
     m3u_lines = ["#EXTM3U\n"]
 
@@ -137,7 +110,7 @@ def fetch_and_generate_m3u():
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
-    print(f"Đã cập nhật playlist thành công với {total_channels} kênh độc lập!")
+    print(f"Đã tạo playlist độc lập thành công với {total_channels} kênh!")
 
 if __name__ == "__main__":
     fetch_and_generate_m3u()
