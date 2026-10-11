@@ -1,6 +1,5 @@
 import time
 import requests
-import re
 from datetime import datetime, timezone, timedelta
 
 TZ_VN = timezone(timedelta(hours=7))
@@ -55,22 +54,13 @@ def fetch_and_generate_m3u():
         blv = match.get("blv", [])
         blv_str = f" ({blv[0].replace('blv-', '').capitalize()})" if blv else ""
 
-        # Quét toàn bộ các trường có thể chứa ID hoặc link trong đối tượng match
-        stream_url = ""
-        match_str = str(match)
-        url_match = re.search(r'(https?://[^\s<>"]+vcdn\.cloud/[^\s<>"]+\.m3u8)', match_str)
-        if url_match:
-            stream_url = url_match.group(1).replace('\\/', '/')
-        else:
-            # Lấy bất kỳ mã định danh nào có sẵn trong dict của trận đấu
-            match_id = match.get("fi") or match.get("id") or match.get("match_id") or ""
-            if match_id and (is_live or status_code == "LIVE"):
-                stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{match_id}_hd/{match_id}_hd@720p.m3u8"
-            else:
-                continue
-
-        if not stream_url:
+        # Lấy mã định danh trận đấu từ API
+        match_id = match.get("fi") or match.get("id") or match.get("match_id") or ""
+        if not match_id:
             continue
+
+        # Xây dựng đường dẫn stream dựa trên mã định danh chuẩn của hạ tầng
+        stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{match_id}_hd/{match_id}_hd@720p.m3u8"
 
         # Phân loại nhóm thể thao
         if stype == "football" or "⚽" in stype:
@@ -94,6 +84,7 @@ def fetch_and_generate_m3u():
         })
         total_channels += 1
 
+    # Thứ tự ưu tiên hiển thị
     display_order = ["Bóng Đá", "Bóng Rổ", "Bóng Chuyền", "Quần Vợt", "Bóng Bàn", "Thể Thao Khác"]
     m3u_lines = ["#EXTM3U\n"]
 
@@ -104,7 +95,7 @@ def fetch_and_generate_m3u():
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
-    print(f"Đã tạo playlist thành công với {total_channels} kênh!")
+    print(f"Đã tạo playlist thành công với tổng số {total_channels} kênh!")
 
 if __name__ == "__main__":
     fetch_and_generate_m3u()
