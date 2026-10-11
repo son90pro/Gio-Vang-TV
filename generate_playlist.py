@@ -1,19 +1,45 @@
 import time
 import requests
+import re
+from datetime import datetime, timezone, timedelta
+
+TZ_VN = timezone(timedelta(hours=7))
+
+def get_real_stream_url(slug):
+    """ Tải trang chi tiết trận đấu dựa vào slug để bóc tách link .m3u8 thực tế chứa session ID động """
+    if not slug:
+        return None
+    
+    url = f"https://giovang.tax/{slug}" if not slug.startswith("http") else slug
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://giovang.tax/"
+    }
+    try:
+        res = requests.get(url, headers=headers, timeout=6)
+        if res.status_code == 200:
+            # Tìm kiếm chuỗi vcdn.cloud kết thúc bằng .m3u8 trong HTML trang chi tiết
+            match = re.search(r'(https?://[^\s<>"]+vcdn\.cloud/[^\s<>"]+\.m3u8)', res.text)
+            if match:
+                clean_url = match.group(1).replace('&quot;', '').replace('\\/', '/')
+                return clean_url
+    except Exception:
+        pass
+    return None
 
 def fetch_and_generate_m3u():
     timestamp = int(time.time())
     api_url = f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://giovang.tax/"
     }
 
     try:
         res = requests.get(api_url, headers=headers, timeout=10)
         if res.status_code != 200:
-            print("Không kết nối được API chính!")
+            print("Không tải được API chính!")
             return
         matches = res.json().get("response", [])
     except Exception as e:
@@ -51,23 +77,21 @@ def fetch_and_generate_m3u():
         blv = match.get("blv", [])
         blv_str = f" ({blv[0].replace('blv-', '').capitalize()})" if blv else ""
 
-        # Lọc ra các trường link tiềm năng có sẵn trong API (nếu nhà phát triển có đính kèm)
-        stream_url = (
-            match.get("stream_url") or 
-            match.get("link") or 
-            match.get("url") or 
-            match.get("hls") or 
-            ""
-        )
+        # Lấy slug từ API hoặc tự dựng
+        slug = match.get("slug", "")
+        fi = str(match.get("fi", match.get("id", "")))
+        if not slug:
+            slug_name = f"{home}-vs-{away}".lower().replace(" ", "-")
+            slug = f"truc-tiep-{slug_name}-{fi}"
 
-        # Nếu API không chứa sẵn link, ta kiểm tra xem có mã fi/link phụ nào khác không
+        # Bóc tách link stream thực tế từ trang chi tiết
+        stream_url = get_real_stream_url(slug)
+        
+        # Nếu trận chưa lên sóng hoặc chưa có link thật thì bỏ qua để tránh link chết trên tivi
         if not stream_url:
-            fi = str(match.get("fi", match.get("id", "")))
-            # Thử cấu trúc đường dẫn chuẩn thường dùng của vcdn nếu trận đang live thực sự
             if is_live or status_code == "LIVE":
                 stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
             else:
-                # Trận chưa đá thực sự thì bỏ qua hoặc gán link chờ để không làm lỗi tivi
                 continue
 
         # Phân loại nhóm thể thao
@@ -75,7 +99,7 @@ def fetch_and_generate_m3u():
             group, emoji = "Bóng Đá", "⚽"
         elif stype == "basketball" or "🏀" in stype:
             group, emoji = "Bóng Rổ", "🏀"
-        elif stype == "volleyball" or "🏐" in sport_type if 'sport_type' in locals() else "volleyball" in stype:
+        elif stype == "volleyball" or "🏐" in stype:
             group, emoji = "Bóng Chuyền", "🏐"
         elif stype in ["tennis", "bongban"] or any(e in stype for e in ["🥎", "🎾", "🏓"]):
             group = "Quần Vợt" if stype == "tennis" else "Bóng Bàn"
@@ -92,7 +116,7 @@ def fetch_and_generate_m3u():
         })
         total_channels += 1
 
-    # Thứ tự ưu tiên (Bóng Đá lên đầu)
+    # Thứ tự ưu tiên (Bóng Đá đứng đầu)
     display_order = ["Bóng Đá", "Bóng Rổ", "Bóng Chuyền", "Quần Vợt", "Bóng Bàn", "Thể Thao Khác"]
     m3u_lines = ["#EXTM3U\n"]
 
@@ -103,7 +127,7 @@ def fetch_and_generate_m3u():
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.write("\n".join(m3u_lines))
-    print(f"Đã tạo playlist thành công với {total_channels} kênh đang hoạt động!")
+    print(f"Đã tạo playlist độc lập thành công với {total_channels} kênh hoạt động!")
 
 if __name__ == "__main__":
     fetch_and_generate_m3u()
