@@ -3,62 +3,97 @@ import requests
 
 def fetch_and_generate_m3u():
     timestamp = int(time.time())
-    api_url = f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
-    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://giovang.uno/"
     }
 
-    print(f"Đang gọi API: {api_url}")
-    try:
-        res = requests.get(api_url, headers=headers, timeout=10)
-        if res.status_code != 200:
-            print(f"Không thể kết nối API, mã lỗi: {res.status_code}")
-            return
-        
-        data = res.json()
-        matches = data.get("response", [])
-        print(f"API trả về tổng số {len(matches)} trận đấu thô.")
-    except Exception as e:
-        print(f"Lỗi kết nối API: {e}")
-        return
+    # Quét đồng thời các endpoint chứa toàn bộ lịch thi đấu và trận live của hệ thống
+    endpoints = [
+        f"https://live-api.keonhacaitp.one/storage/livestream/home.json?t={timestamp}",
+        f"https://live-api.keonhacaitp.one/storage/livestream/matches.json?t={timestamp}",
+        f"https://live-api.keonhacaitp.one/storage/livestream/schedule.json?t={timestamp}",
+        f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
+    ]
 
-    grouped = {
-        "Bóng Đá": [],
-        "Bóng Rổ": [],
-        "Bóng Chuyền": [],
-        "Quần Vợt": [],
-        "Bóng Bàn": [],
-        "Thể Thao Khác": []
-    }
+    all_matches = []
+    seen_ids = set()
 
+    for url in endpoints:
+        try:
+            res = requests.get(url, headers=headers, timeout=8)
+            if res.status_code == 200:
+                data = res.json()
+                matches = []
+                if isinstance(data, dict):
+                    matches = data.get("response", data.get("matches", data.get("data", [])))
+                    if not matches and "response" in data:
+                        matches = data["response"]
+                elif isinstance(data, list):
+                    matches = data
+
+                if isinstance(matches, list):
+                    for m in matches:
+                        m_id = str(m.get("fi", m.get("id", "")))
+                        if m_id and m_id not in seen_ids:
+                            seen_ids.add(m_id)
+                            all_matches.append(m)
+        except Exception:
+            continue
+
+    print(f"Tổng hợp được tổng số {len(all_matches)} trận đấu từ hệ thống.")
+
+    m3u_lines = ["#EXTM3U\n"]
     total_channels = 0
 
-    for match in matches:
+    for match in all_matches:
         teams = match.get("teams", {})
         home = teams.get("home", {}).get("name", "").strip()
         away = teams.get("away", {}).get("name", "").strip()
+        
+        # Xử lý trường hợp sự kiện đặc biệt (như F1, Võ thuật không có cấu trúc home vs away chuẩn)
         if not home or not away:
-            continue
+            title_alt = match.get("title", match.get("name", ""))
+            if title_alt:
+                home = title_alt
+                away = ""
+            else:
+                continue
 
-        stype = match.get("type", "")
         league = match.get("league", {})
         logo = teams.get("home", {}).get("logo", "") or league.get("icon", "")
         
         time_str = match.get("time", "")
+        if len(time_str) > 5:
+            time_str = time_str[:5]
+            
         day_month = match.get("day_month", "")
         t_display = f"{time_str} {day_month}".strip() or "Hôm nay"
 
         is_live = match.get("is_live", False)
         status_code = match.get("status_code", "")
         
-        if is_live or status_code == "LIVE":
+        if is_live or status_code == "LIVE" or status_code == "Đang diễn ra":
             status_icon = "🟢 "
-        elif status_code in ["FT", "Kết thúc"]:
-            status_icon = "🏁 "
         else:
-            status_icon = "⏳ "
+            status_icon = ""
+
+        # Nhận diện biểu tượng môn thể thao
+        stype = match.get("type", "").lower()
+        if "basketball" in stype or "bóng rổ" in stype:
+            emoji = "🏀"
+        elif "volleyball" in stype or "bóng chuyền" in stype:
+            emoji = "🏐"
+        elif "tennis" in stype or "quần vợt" in stype:
+            emoji = "🎾"
+        elif "f1" in stype or "formula" in stype:
+            emoji = "🏎️"
+        elif "box" in stype or "one" in stype or "mma" in stype or "🥊" in stype:
+            emoji = "🥊"
+        elif "game" in stype or "esport" in stype:
+            emoji = "🎮"
+        else:
+            emoji = "⚽"
 
         blv_list = match.get("blv", [])
         blv_str = ""
@@ -70,37 +105,20 @@ def fetch_and_generate_m3u():
         if not fi:
             continue
 
+        # Xây dựng đường dẫn stream chuẩn vcdn
         stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
 
-        # Phân loại nhóm thể thao
-        if stype == "football" or "⚽" in stype:
-            group, emoji = "Bóng Đá", "⚽"
-        elif stype == "basketball" or "🏀" in stype:
-            group, emoji = "Bóng Rổ", "🏀"
-        elif stype == "volleyball" or "🏐" in stype:
-            group, emoji = "Bóng Chuyền", "🏐"
-        elif stype in ["tennis", "bongban"] or any(e in stype for e in ["🥎", "🎾", "🏓"]):
-            group = "Quần Vợt" if stype == "tennis" else "Bóng Bàn"
-            emoji = "🥎" if stype == "tennis" else "🏓"
-        else:
-            group, emoji = "Thể Thao Khác", "🏆"
+        # Gom nhóm toàn bộ vào chung group "Giờ Vàng TV" đúng yêu cầu
+        match_title_str = f"{status_icon}{t_display} {emoji} {home}"
+        if away:
+            match_title_str += f" vs {away}"
+        match_title_str += f"{blv_str} [hls]"
 
-        display_title = f"{status_icon}{t_display} {emoji} {home} vs {away}{blv_str} [hls]"
-        inf_line = f'#EXTINF:-1 tvg-logo="{logo}" group-title="{group}" , {display_title}'
+        inf_line = f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {match_title_str}'
 
-        grouped[group].append({
-            "inf": inf_line,
-            "url": stream_url
-        })
+        m3u_lines.append(inf_line + "\n")
+        m3u_lines.append(stream_url + "\n")
         total_channels += 1
-
-    display_order = ["Bóng Đá", "Bóng Rổ", "Bóng Chuyền", "Quần Vợt", "Bóng Bàn", "Thể Thao Khác"]
-    m3u_lines = ["#EXTM3U\n"]
-
-    for group in display_order:
-        for ch in grouped.get(group, []):
-            m3u_lines.append(ch["inf"] + "\n")
-            m3u_lines.append(ch["url"] + "\n")
 
     with open("playlist.m3u", "w", encoding="utf-8") as f:
         f.writelines(m3u_lines)
