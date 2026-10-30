@@ -6,25 +6,43 @@ TZ_VN = timezone(timedelta(hours=7))
 
 def fetch_and_generate_m3u():
     timestamp = int(time.time())
-    # Sử dụng API endpoint chính xác với domain mới
-    api_url = f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
-    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://giovang.uno/"
     }
 
-    try:
-        res = requests.get(api_url, headers=headers, timeout=10)
-        if res.status_code != 200:
-            print(f"Không thể kết nối API, mã lỗi: {res.status_code}")
-            return
-        
-        data = res.json()
-        matches = data.get("response", [])
-    except Exception as e:
-        print(f"Lỗi kết nối API: {e}")
-        return
+    # Các endpoint tiềm năng của API để gom cả trận live lẫn lịch thi đấu
+    endpoints = [
+        f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}",
+        f"https://live-api.keonhacaitp.one/storage/livestream/schedule.json?t={timestamp}",
+        f"https://live-api.keonhacaitp.one/storage/livestream/fixtures.json?t={timestamp}",
+        f"https://live-api.keonhacaitp.one/storage/livestream/matches.json?t={timestamp}"
+    ]
+
+    all_matches = []
+    seen_ids = set()
+
+    # Quét vét cạn các endpoint để lấy đầy đủ dữ liệu
+    for url in endpoints:
+        try:
+            res = requests.get(url, headers=headers, timeout=8)
+            if res.status_code == 200:
+                data = res.json()
+                matches = data.get("response", data) if isinstance(data, dict) else data
+                if isinstance(matches, list):
+                    for m in matches:
+                        m_id = str(m.get("fi", m.get("id", "")))
+                        if m_id and m_id not in seen_ids:
+                            seen_ids.add(m_id)
+                            all_matches.append(m)
+        except Exception:
+            continue
+
+    # Xác định ngày hôm nay và ngày mai theo giờ Việt Nam
+    now_vn = datetime.now(TZ_VN)
+    current_date_str = now_vn.strftime("%d-%m-%Y") # Định dạng: DD-MM-YYYY (VD: 30-10-2026)
+    tomorrow_vn = now_vn + timedelta(days=1)
+    tomorrow_date_str = tomorrow_vn.strftime("%d-%m-%Y")
 
     grouped = {
         "Bóng Đá": [],
@@ -37,16 +55,22 @@ def fetch_and_generate_m3u():
 
     total_channels = 0
 
-    for match in matches:
+    for match in all_matches:
         teams = match.get("teams", {})
         home = teams.get("home", {}).get("name", "").strip()
         away = teams.get("away", {}).get("name", "").strip()
         if not home or not away:
             continue
 
-        stype = match.get("type", "")
+        # Lọc ưu tiên các trận trong ngày hôm nay hoặc ngày mai (hoặc đang LIVE)
+        match_date = match.get("date", "")
+        is_live = match.get("is_live", False)
+        status_code = match.get("status_code", "")
         
-        # Lấy logo đội nhà hoặc biểu tượng giải đấu
+        if match_date and match_date not in [current_date_str, tomorrow_date_str] and not is_live and status_code != "LIVE":
+            continue
+
+        stype = match.get("type", "")
         league = match.get("league", {})
         logo = teams.get("home", {}).get("logo", "") or league.get("icon", "")
         
@@ -54,26 +78,26 @@ def fetch_and_generate_m3u():
         day_month = match.get("day_month", "")
         t_display = f"{time_str} {day_month}".strip() or "Hôm nay"
 
-        is_live = match.get("is_live", False)
-        status_code = match.get("status_code", "")
-        status_icon = "🟢 " if (is_live or status_code == "LIVE") else "⏳ "
+        if is_live or status_code == "LIVE":
+            status_icon = "🟢 "
+        elif status_code in ["FT", "Kết thúc"]:
+            status_icon = "🏁 "
+        else:
+            status_icon = "⏳ "
 
-        # Lấy tên Bình luận viên (BLV)
         blv_list = match.get("blv", [])
         blv_str = ""
         if blv_list:
             blv_name = str(blv_list[0]).replace('blv-', '').capitalize()
             blv_str = f" ({blv_name})"
 
-        # Lấy mã định danh fi chính xác từ JSON
-        fi = str(match.get("fi", ""))
+        fi = str(match.get("fi", match.get("id", "")))
         if not fi:
             continue
 
-        # Xây dựng đường dẫn stream .m3u8 chuẩn xác dựa trên fi
         stream_url = f"https://ftlh5sc02iliv.vcdn.cloud/{fi}_hd/{fi}_hd@720p.m3u8"
 
-        # Phân loại nhóm thể thao dựa trên trường type
+        # Phân loại nhóm thể thao
         if stype == "football" or "⚽" in stype:
             group, emoji = "Bóng Đá", "⚽"
         elif stype == "basketball" or "🏀" in stype:
@@ -95,21 +119,11 @@ def fetch_and_generate_m3u():
         })
         total_channels += 1
 
-    # Thứ tự hiển thị các nhóm trên tivi (Bóng Đá lên đầu)
     display_order = ["Bóng Đá", "Bóng Rổ", "Bóng Chuyền", "Quần Vợt", "Bóng Bàn", "Thể Thao Khác"]
     m3u_lines = ["#EXTM3U\n"]
 
     for group in display_order:
         for ch in grouped.get(group, []):
             m3u_lines.append(ch["inf"])
-            m3u_lines.append(ch["url"] + "\n")
-
-    # Ghi tệp playlist.m3u
-    with open("playlist.m3u", "w", encoding="utf-8") as f:
-        f.write("\n".join(m3u_lines))
-        
-    print(f"Đã cập nhật playlist thành công với tổng số {total_channels} kênh!")
-
-if __name__ == "__main__":
-    fetch_and_generate_m3u()
-    
+            m3u_lines.append(ch
+            
