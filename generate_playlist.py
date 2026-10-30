@@ -11,7 +11,7 @@ def fetch_and_generate_m3u():
         "Referer": "https://giovang.uno/"
     }
 
-    # Các endpoint tiềm năng của API để gom cả trận live lẫn lịch thi đấu
+    # Quét đồng thời các endpoint để lấy đầy đủ lịch thi đấu hôm nay và ngày mai
     endpoints = [
         f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}",
         f"https://live-api.keonhacaitp.one/storage/livestream/schedule.json?t={timestamp}",
@@ -22,7 +22,6 @@ def fetch_and_generate_m3u():
     all_matches = []
     seen_ids = set()
 
-    # Quét vét cạn các endpoint để lấy đầy đủ dữ liệu
     for url in endpoints:
         try:
             res = requests.get(url, headers=headers, timeout=8)
@@ -38,9 +37,8 @@ def fetch_and_generate_m3u():
         except Exception:
             continue
 
-    # Xác định ngày hôm nay và ngày mai theo giờ Việt Nam
     now_vn = datetime.now(TZ_VN)
-    current_date_str = now_vn.strftime("%d-%m-%Y") # Định dạng: DD-MM-YYYY (VD: 30-10-2026)
+    current_date_str = now_vn.strftime("%d-%m-%Y")
     tomorrow_vn = now_vn + timedelta(days=1)
     tomorrow_date_str = tomorrow_vn.strftime("%d-%m-%Y")
 
@@ -62,7 +60,6 @@ def fetch_and_generate_m3u():
         if not home or not away:
             continue
 
-        # Lọc ưu tiên các trận trong ngày hôm nay hoặc ngày mai (hoặc đang LIVE)
         match_date = match.get("date", "")
         is_live = match.get("is_live", False)
         status_code = match.get("status_code", "")
@@ -124,6 +121,14 @@ def fetch_and_generate_m3u():
 
     for group in display_order:
         for ch in grouped.get(group, []):
-            m3u_lines.append(ch["inf"])
-            m3u_lines.append(ch
-            
+            m3u_lines.append(ch["inf"] + "\n")
+            m3u_lines.append(ch["url"] + "\n")
+
+    with open("playlist.m3u", "w", encoding="utf-8") as f:
+        f.writelines(m3u_lines)
+        
+    print(f"Đã cập nhật playlist thành công với tổng số {total_channels} kênh!")
+
+if __name__ == "__main__":
+    fetch_and_generate_m3u()
+    
