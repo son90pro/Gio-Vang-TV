@@ -1,46 +1,28 @@
 import time
 import requests
-from datetime import datetime, timezone, timedelta
-
-TZ_VN = timezone(timedelta(hours=7))
 
 def fetch_and_generate_m3u():
     timestamp = int(time.time())
+    api_url = f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}"
+    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://giovang.uno/"
     }
 
-    # Quét đồng thời các endpoint để lấy đầy đủ lịch thi đấu hôm nay và ngày mai
-    endpoints = [
-        f"https://live-api.keonhacaitp.one/storage/livestream/live.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/schedule.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/fixtures.json?t={timestamp}",
-        f"https://live-api.keonhacaitp.one/storage/livestream/matches.json?t={timestamp}"
-    ]
-
-    all_matches = []
-    seen_ids = set()
-
-    for url in endpoints:
-        try:
-            res = requests.get(url, headers=headers, timeout=8)
-            if res.status_code == 200:
-                data = res.json()
-                matches = data.get("response", data) if isinstance(data, dict) else data
-                if isinstance(matches, list):
-                    for m in matches:
-                        m_id = str(m.get("fi", m.get("id", "")))
-                        if m_id and m_id not in seen_ids:
-                            seen_ids.add(m_id)
-                            all_matches.append(m)
-        except Exception:
-            continue
-
-    now_vn = datetime.now(TZ_VN)
-    current_date_str = now_vn.strftime("%d-%m-%Y")
-    tomorrow_vn = now_vn + timedelta(days=1)
-    tomorrow_date_str = tomorrow_vn.strftime("%d-%m-%Y")
+    print(f"Đang gọi API: {api_url}")
+    try:
+        res = requests.get(api_url, headers=headers, timeout=10)
+        if res.status_code != 200:
+            print(f"Không thể kết nối API, mã lỗi: {res.status_code}")
+            return
+        
+        data = res.json()
+        matches = data.get("response", [])
+        print(f"API trả về tổng số {len(matches)} trận đấu thô.")
+    except Exception as e:
+        print(f"Lỗi kết nối API: {e}")
+        return
 
     grouped = {
         "Bóng Đá": [],
@@ -53,18 +35,11 @@ def fetch_and_generate_m3u():
 
     total_channels = 0
 
-    for match in all_matches:
+    for match in matches:
         teams = match.get("teams", {})
         home = teams.get("home", {}).get("name", "").strip()
         away = teams.get("away", {}).get("name", "").strip()
         if not home or not away:
-            continue
-
-        match_date = match.get("date", "")
-        is_live = match.get("is_live", False)
-        status_code = match.get("status_code", "")
-        
-        if match_date and match_date not in [current_date_str, tomorrow_date_str] and not is_live and status_code != "LIVE":
             continue
 
         stype = match.get("type", "")
@@ -75,6 +50,9 @@ def fetch_and_generate_m3u():
         day_month = match.get("day_month", "")
         t_display = f"{time_str} {day_month}".strip() or "Hôm nay"
 
+        is_live = match.get("is_live", False)
+        status_code = match.get("status_code", "")
+        
         if is_live or status_code == "LIVE":
             status_icon = "🟢 "
         elif status_code in ["FT", "Kết thúc"]:
