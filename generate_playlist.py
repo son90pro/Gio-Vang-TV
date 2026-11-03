@@ -10,6 +10,10 @@ def get_sport_icon(text=""):
         return "🏀"
     elif any(k in t for k in ['volleyball', 'bóng chuyền']):
         return "🏐"
+    elif any(k in t for k in ['baseball', 'bóng chày', 'kt wiz']):
+        return "⚾"
+    elif any(k in t for k in ['table tennis', 'ping pong', 'bóng bàn', 'lind']):
+        return "🏓"
     elif any(k in t for k in ['lol', 'game', 'esports', 'dota', 'csgo']):
         return "🎮"
     elif any(k in t for k in ['badminton', 'cầu lông']):
@@ -22,8 +26,7 @@ def find_all_nodes(node, results):
         for item in node:
             find_all_nodes(item, results)
     elif isinstance(node, dict):
-        # Nếu dict này có chứa thông tin đội hoặc link stream thì nhận diện là một trận đấu/node hợp lệ
-        if any(k in node for k in ['home_team', 'home', 'away_team', 'away', 'streams', 'links', 'url', 'm3u8', 'flv', 'live_url']):
+        if any(k in node for k in ['home_team', 'home', 'away_team', 'away', 'streams', 'links', 'url', 'm3u8', 'flv', 'play_url']):
             results.append(node)
         for k, v in node.items():
             if isinstance(v, (list, dict)):
@@ -75,7 +78,7 @@ def generate_m3u_and_json():
                 time_val = match.get("time") or match.get("start_time") or match.get("hour") or match.get("match_time") or ""
                 date_val = match.get("date") or match.get("match_date") or "03/11"
                 
-                time_str = "14:00"
+                time_str = "14:45"
                 if time_val:
                     t_match = re.search(r'(\d{2}[:h]\d{2})', str(time_val))
                     if t_match:
@@ -90,9 +93,10 @@ def generate_m3u_and_json():
                         date_str = d_match.group(1).replace('-', '/')
 
                 # 3. BLV / Server
-                blv_name = match.get("blv") or match.get("caster") or match.get("server_name") or match.get("author") or "GTV"
+                blv_name = match.get("blv") or match.get("caster") or match.get("server_name") or match.get("author") or "gtv"
                 if isinstance(blv_name, dict):
-                    blv_name = blv_name.get("name", "GTV")
+                    blv_name = blv_name.get("name", "gtv")
+                blv_tag = f"blv-{str(blv_name).lower().strip()}" if not str(blv_name).startswith("blv") else str(blv_name).lower()
 
                 # 4. Icon & Logo
                 tournament = match.get("tournament") or match.get("league") or match.get("competition") or ""
@@ -100,43 +104,42 @@ def generate_m3u_and_json():
                 
                 logo = match.get("home_logo") or match.get("logo") or match.get("icon") or ""
                 if not logo or not str(logo).startswith("http"):
-                    logo = "https://giovang.love/logo.png"
+                    logo = "https://images.keovip88.net/images/teams/default.png"
 
-                # 5. Quét toàn bộ link stream (m3u8, flv, url...) từ mọi khóa có thể
+                # 5. Lấy danh sách link stream
                 streams = []
                 for u_key in ["url", "stream_url", "m3u8", "link", "flv", "play_url", "live_url"]:
                     val = match.get(u_key)
                     if isinstance(val, str) and val.startswith("http"):
-                        streams.append((val, blv_name))
+                        streams.append((val, blv_tag))
 
                 for sk in ["streams", "links", "servers", "sources", "quality"]:
                     arr = match.get(sk)
                     if isinstance(arr, list):
                         for s in arr:
                             if isinstance(s, str) and s.startswith("http"):
-                                streams.append((s, blv_name))
+                                streams.append((s, blv_tag))
                             elif isinstance(s, dict):
                                 s_url = s.get("url") or s.get("link") or s.get("m3u8") or s.get("flv") or ""
-                                s_name = s.get("name") or s.get("title") or blv_name
+                                s_name = s.get("name") or s.get("title") or blv_tag
                                 if s_url.startswith("http"):
                                     streams.append((s_url, s_name))
 
-                # Fallback: quét sâu bên trong dict lấy các link http có đuôi stream
                 if not streams:
                     for sub_k, sub_v in match.items():
-                        if isinstance(sub_v, str) and sub_v.startswith("http") and any(ext in sub_v.lower() for ext in ['.m3u8', '.flv', 'live', 'playlist', 'm3u']):
-                            streams.append((sub_v, blv_name))
+                        if isinstance(sub_v, str) and sub_v.startswith("http") and any(ext in sub_v.lower() for ext in ['.m3u8', '.flv', 'live', 'playlist']):
+                            streams.append((sub_v, blv_tag))
 
-                # Ghi vào file M3U
-                for idx, (s_url, s_tag) in enumerate(streams):
+                # Nếu vẫn chưa tìm thấy stream trong JSON, cung cấp link dự phòng chuẩn mẫu
+                if not streams:
+                    streams.append(("https://freem3u.xyz/static/no-signal/low.m3u8", blv_tag))
+
+                # Ghi ra file M3U theo đúng chuẩn mẫu
+                for s_url, tag in streams:
                     if s_url not in seen_links:
                         seen_links.add(s_url)
 
-                        tag_str = str(s_tag).upper()
-                        if idx % 2 == 1 and not tag_str.startswith("HD"):
-                            tag_str = f"HD {tag_str}"
-
-                        display_title = f"🟢 {time_str} {date_str} {sport_icon} {teams_str} ({tag_str})"
+                        display_title = f"🟢 {time_str} {date_str} {sport_icon} {teams_str} ({tag}) [hls]"
 
                         m3u_content += f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {display_title}\n'
                         m3u_content += '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36\n'
@@ -144,5 +147,17 @@ def generate_m3u_and_json():
                         m3u_content += f'{s_url}\n\n'
                         count += 1
 
-            with open('playlist.m3u', 'w', encoding='utf-8') as
+            with open('playlist.m3u', 'w', encoding='utf-8') as f:
+                f.write(m3u_content)
+                
+            print(f"Đã tạo xong Giờ Vàng TV với {count} luồng chuẩn chỉnh!")
             
+        else:
+            print(f"Lỗi HTTP: {response.status_code}")
+            
+    except Exception as e:
+        print(f"Lỗi: {e}")
+
+if __name__ == "__main__":
+    generate_m3u_and_json()
+    
