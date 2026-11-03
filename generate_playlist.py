@@ -1,29 +1,162 @@
+import json
+import re
 import requests
 
-# Sử dụng nguồn danh sách phát tổng hợp chuẩn, đầy đủ trận và chạy ổn định
-SOURCE_URL = "https://thtt.pages.dev/tttt.m3u"
+def get_sport_icon(text=""):
+    t = str(text).lower()
+    if any(k in t for k in ['tennis', 'quần vợt']):
+        return "🥎"
+    elif any(k in t for k in ['basketball', 'bóng rổ']):
+        return "🏀"
+    elif any(k in t for k in ['volleyball', 'bóng chuyền']):
+        return "🏐"
+    elif any(k in t for k in ['lol', 'game', 'esports', 'dota', 'csgo']):
+        return "🎮"
+    elif any(k in t for k in ['badminton', 'cầu lông']):
+        return "🏸"
+    else:
+        return "⚽"
 
-def fetch_and_generate_m3u():
-    print(f"Đang tải danh sách từ nguồn chuẩn: {SOURCE_URL}")
+def generate_m3u_and_json():
+    target_url = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://giovang.love/"
     }
-    
+
     try:
-        res = requests.get(SOURCE_URL, headers=headers, allow_redirects=True, timeout=15)
-        if res.status_code == 200:
-            content = res.text
+        print("Đang kết nối lấy dữ liệu Giờ Vàng TV...")
+        response = requests.get(target_url, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            data = response.json()
             
-            # Ghi nội dung playlist chuẩn vào tệp playlist.m3u cho tivi
-            with open("playlist.m3u", "w", encoding="utf-8") as f:
-                f.write(content)
+            with open('giovang.json', 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
             
-            channels_count = sum(1 for line in content.splitlines() if line.startswith("#EXTINF:"))
-            print(f"Đã cập nhật playlist thành công với tổng số {channels_count} kênh!")
+            m3u_content = "#EXTM3U\n\n"
+            count = 0
+            seen_links = set()
+
+            # Trích xuất danh sách trận đấu từ JSON API Giờ Vàng
+            matches_list = []
+            if isinstance(data, dict):
+                for k in ["data", "matches", "list", "items", "schedule", "channels"]:
+                    if k in data and isinstance(data[k], list):
+                        matches_list = data[k]
+                        break
+                if not matches_list:
+                    # Nếu response là dict chứa các chuyên mục/giải đấu
+                    for v in data.values():
+                        if isinstance(v, list):
+                            matches_list.extend(v)
+            elif isinstance(data, list):
+                matches_list = data
+
+            print(f"Tìm thấy {len(matches_list)} trận đấu từ Giờ Vàng TV.")
+
+            for match in matches_list:
+                if not isinstance(match, dict):
+                    continue
+
+                # 1. Tên đội nhà và đội khách hoặc tên trận
+                home = match.get("home_team") or match.get("home") or match.get("home_name") or ""
+                away = match.get("away_team") or match.get("away") or match.get("away_name") or ""
+                raw_title = match.get("title") or match.get("name") or match.get("match_name") or ""
+                
+                teams_str = ""
+                if home and away:
+                    teams_str = f"{home} vs {away}"
+                elif " vs " in raw_title.lower():
+                    teams_str = raw_title
+                else:
+                    teams_str = raw_title if raw_title else "Trực Tiếp"
+
+                # 2. Thời gian (Giờ & Ngày)
+                time_val = match.get("time") or match.get("start_time") or match.get("hour") or match.get("match_time") or ""
+                date_val = match.get("date") or match.get("match_date") or "03/11"
+                
+                # Làm sạch giờ phút
+                time_str = "14:00"
+                if time_val:
+                    t_match = re.search(r'(\d{2}[:h]\d{2})', str(time_val))
+                    if t_match:
+                        time_str = t_match.group(1).replace('h', ':')
+                    else:
+                        time_str = str(time_val)[:5]
+
+                date_str = "03/11"
+                if date_val:
+                    d_match = re.search(r'(\d{2}[-/]\d{2})', str(date_val))
+                    if d_match:
+                        date_str = d_match.group(1).replace('-', '/')
+
+                # 3. Tên BLV / Nhà đài / Server
+                blv_name = match.get("blv") or match.get("caster") or match.get("server_name") or match.get("author") or "GTV"
+                if isinstance(blv_name, dict):
+                    blv_name = blv_name.get("name", "GTV")
+
+                # 4. Icon thể thao & Logo
+                tournament = match.get("tournament") or match.get("league") or match.get("competition") or ""
+                sport_icon = get_sport_icon(str(tournament) + " " + teams_str)
+                
+                logo = match.get("home_logo") or match.get("logo") or match.get("icon") or ""
+                if not logo or not str(logo).startswith("http"):
+                    logo = "https://giovang.love/logo.png"
+
+                # 5. Lấy danh sách link stream (m3u8, flv, url...)
+                streams = []
+                for u_key in ["url", "stream_url", "m3u8", "link", "flv", "play_url"]:
+                    val = match.get(u_key)
+                    if isinstance(val, str) and val.startswith("http"):
+                        streams.append((val, blv_name))
+
+                for sk in ["streams", "links", "servers", "sources"]:
+                    arr = match.get(sk)
+                    if isinstance(arr, list):
+                        for s in arr:
+                            if isinstance(s, str) and s.startswith("http"):
+                                streams.append((s, blv_name))
+                            elif isinstance(s, dict):
+                                s_url = s.get("url") or s.get("link") or s.get("m3u8") or s.get("flv") or ""
+                                s_name = s.get("name") or s.get("title") or blv_name
+                                if s_url.startswith("http"):
+                                    streams.append((s_url, s_name))
+
+                # Nếu không tìm thấy trong list, quét rộng hơn
+                if not streams:
+                    for sub_k, sub_v in match.items():
+                        if isinstance(sub_v, str) and sub_v.startswith("http") and any(ext in sub_v.lower() for ext in ['.m3u8', '.flv', 'live', 'playlist']):
+                            streams.append((sub_v, blv_name))
+
+                # Ghi vào file M3U chuẩn định dạng
+                for idx, (s_url, s_tag) in enumerate(streams):
+                    if s_url not in seen_links:
+                        seen_links.add(s_url)
+
+                        tag_str = str(s_tag).upper()
+                        if idx % 2 == 1 and not tag_str.startswith("HD"):
+                            tag_str = f"HD {tag_str}"
+
+                        display_title = f"🟢 {time_str} {date_str} {sport_icon} {teams_str} ({tag_str})"
+
+                        m3u_content += f'#EXTINF:-1 tvg-logo="{logo}" group-title="Giờ Vàng TV" , {display_title}\n'
+                        m3u_content += '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36\n'
+                        m3u_content += '#EXTVLCOPT:http-referrer=https://giovang.love/\n'
+                        m3u_content += f'{s_url}\n\n'
+                        count += 1
+
+            with open('playlist.m3u', 'w', encoding='utf-8') as f:
+                f.write(m3u_content)
+                
+            print(f"Đã tạo xong Giờ Vàng TV với {count} luồng chuẩn chỉnh!")
+            
         else:
-            print(f"Không thể tải dữ liệu, mã lỗi HTTP: {res.status_code}")
+            print(f"Lỗi HTTP: {response.status_code}")
+            
     except Exception as e:
-        print(f"Lỗi kết nối khi tải playlist: {e}")
+        print(f"Lỗi: {e}")
 
 if __name__ == "__main__":
-    fetch_and_generate_m3u()
+    generate_m3u_and_json()
+    
