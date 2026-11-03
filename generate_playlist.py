@@ -21,16 +21,16 @@ def get_sport_icon(text=""):
     else:
         return "⚽"
 
-def find_all_nodes(node, results):
+def find_all_matches(node, results):
     if isinstance(node, list):
         for item in node:
-            find_all_nodes(item, results)
+            find_all_matches(item, results)
     elif isinstance(node, dict):
         if any(k in node for k in ['home_team', 'home', 'away_team', 'away', 'streams', 'links', 'url', 'm3u8', 'flv', 'play_url']):
             results.append(node)
         for k, v in node.items():
             if isinstance(v, (list, dict)):
-                find_all_nodes(v, results)
+                find_all_matches(v, results)
 
 def generate_m3u_and_json():
     target_url = "https://live-api.keonhacaitp.one/storage/livestream/live.json"
@@ -54,27 +54,44 @@ def generate_m3u_and_json():
             seen_links = set()
 
             matches_list = []
-            find_all_nodes(data, matches_list)
+            find_all_matches(data, matches_list)
             print(f"Tìm thấy {len(matches_list)} mục dữ liệu từ Giờ Vàng TV.")
 
             for match in matches_list:
                 if not isinstance(match, dict):
                     continue
 
-                # 1. Trích xuất tên đội nhà / đội khách
-                home = match.get("home_team") or match.get("home") or match.get("home_name") or ""
-                away = match.get("away_team") or match.get("away") or match.get("away_name") or ""
+                # Bóc tách đội nhà (Home)
+                home_data = match.get("home_team") or match.get("home") or match.get("home_name") or ""
+                home_name = ""
+                home_logo = ""
+                if isinstance(home_data, dict):
+                    home_name = home_data.get("name", "")
+                    home_logo = home_data.get("logo", "")
+                elif isinstance(home_data, str):
+                    home_name = home_data
+
+                # Bóc tách đội khách (Away)
+                away_data = match.get("away_team") or match.get("away") or match.get("away_name") or ""
+                away_name = ""
+                away_logo = ""
+                if isinstance(away_data, dict):
+                    away_name = away_data.get("name", "")
+                    away_logo = away_data.get("logo", "")
+                elif isinstance(away_data, str):
+                    away_name = away_data
+
                 raw_title = match.get("title") or match.get("name") or match.get("match_name") or ""
                 
                 teams_str = ""
-                if home and away:
-                    teams_str = f"{home} vs {away}"
+                if home_name and away_name:
+                    teams_str = f"{home_name} vs {away_name}"
                 elif " vs " in raw_title.lower():
                     teams_str = raw_title
                 else:
                     teams_str = raw_title if raw_title and len(raw_title) > 3 else "Trực Tiếp"
 
-                # 2. Thời gian
+                # Thời gian
                 time_val = match.get("time") or match.get("start_time") or match.get("hour") or match.get("match_time") or ""
                 date_val = match.get("date") or match.get("match_date") or "03/11"
                 
@@ -92,21 +109,22 @@ def generate_m3u_and_json():
                     if d_match:
                         date_str = d_match.group(1).replace('-', '/')
 
-                # 3. BLV / Server
+                # Tên BLV
                 blv_name = match.get("blv") or match.get("caster") or match.get("server_name") or match.get("author") or "gtv"
                 if isinstance(blv_name, dict):
                     blv_name = blv_name.get("name", "gtv")
-                blv_tag = f"blv-{str(blv_name).lower().strip()}" if not str(blv_name).startswith("blv") else str(blv_name).lower()
+                blv_str = str(blv_name).lower().strip()
+                blv_tag = f"blv-{blv_str}" if not blv_str.startswith("blv") else blv_str
 
-                # 4. Icon & Logo
+                # Icon & Logo ưu tiên lấy từ logo đội nhà
                 tournament = match.get("tournament") or match.get("league") or match.get("competition") or ""
                 sport_icon = get_sport_icon(str(tournament) + " " + teams_str)
                 
-                logo = match.get("home_logo") or match.get("logo") or match.get("icon") or ""
+                logo = home_logo or match.get("logo") or match.get("icon") or ""
                 if not logo or not str(logo).startswith("http"):
                     logo = "https://images.keovip88.net/images/teams/default.png"
 
-                # 5. Lấy danh sách link stream
+                # Lấy danh sách link stream
                 streams = []
                 for u_key in ["url", "stream_url", "m3u8", "link", "flv", "play_url", "live_url"]:
                     val = match.get(u_key)
@@ -130,11 +148,10 @@ def generate_m3u_and_json():
                         if isinstance(sub_v, str) and sub_v.startswith("http") and any(ext in sub_v.lower() for ext in ['.m3u8', '.flv', 'live', 'playlist']):
                             streams.append((sub_v, blv_tag))
 
-                # Nếu vẫn chưa tìm thấy stream trong JSON, cung cấp link dự phòng chuẩn mẫu
                 if not streams:
                     streams.append(("https://freem3u.xyz/static/no-signal/low.m3u8", blv_tag))
 
-                # Ghi ra file M3U theo đúng chuẩn mẫu
+                # Ghi ra file M3U theo đúng mẫu chuẩn yêu cầu
                 for s_url, tag in streams:
                     if s_url not in seen_links:
                         seen_links.add(s_url)
