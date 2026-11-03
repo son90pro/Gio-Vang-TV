@@ -26,8 +26,7 @@ def extract_matches(node, results):
         for item in node:
             extract_matches(item, results)
     elif isinstance(node, dict):
-        # Nếu dict này chứa thông tin đội hoặc các key đặc trưng của trận đấu
-        if any(k in node for k in ['home_team', 'home', 'away_team', 'away', 'match_name', 'teams', 'play_url', 'm3u8']):
+        if any(k in node for k in ['home_team', 'home', 'away_team', 'away', 'match_name', 'teams', 'play_url', 'm3u8', 'time']):
             results.append(node)
         for k, v in node.items():
             if isinstance(v, (list, dict)):
@@ -56,13 +55,13 @@ def generate_m3u_and_json():
 
             matches_list = []
             extract_matches(data, matches_list)
-            print(f"Tìm thấy {len(matches_list)} mục trận đấu từ Giờ Vàng TV.")
+            print(f"Tìm thấy tổng cộng {len(matches_list)} mục trận đấu từ Giờ Vàng TV.")
 
             for match in matches_list:
                 if not isinstance(match, dict):
                     continue
 
-                # 1. Bóc tách tên đội nhà (Home)
+                # 1. Bóc tách đội nhà (Home)
                 home_data = match.get("home_team") or match.get("home") or match.get("home_name") or ""
                 home_name = ""
                 home_logo = ""
@@ -90,9 +89,12 @@ def generate_m3u_and_json():
                 elif " vs " in raw_title.lower():
                     teams_str = raw_title
                 else:
-                    teams_str = raw_title if raw_title and len(raw_title) > 3 else "Trực Tiếp"
+                    teams_str = raw_title if raw_title and len(raw_title) > 3 else ""
 
-                # 3. Lấy thời gian (Giờ & Ngày tháng thực tế)
+                if not teams_str:
+                    continue  # Bỏ qua nếu không xác định được tên cặp đấu
+
+                # 3. Lấy thời gian (Giờ & Ngày tháng)
                 time_val = match.get("time") or match.get("start_time") or match.get("hour") or match.get("match_time") or ""
                 date_val = match.get("date") or match.get("match_date") or ""
                 
@@ -150,9 +152,9 @@ def generate_m3u_and_json():
                         if isinstance(sub_v, str) and sub_v.startswith("http") and any(ext in sub_v.lower() for ext in ['.m3u8', '.flv', 'vcdn.cloud']):
                             streams.append((sub_v, blv_tag))
 
-                # Nếu vẫn không có link stream, bỏ qua trận chưa phát sóng để tránh lỗi no-signal
+                # Nếu trận sắp diễn ra chưa có link stream live, dùng link placeholder để hiển thị đầy đủ trên TV
                 if not streams:
-                    continue
+                    streams.append(("https://freem3u.xyz/static/no-signal/low.m3u8", blv_tag))
 
                 # Ghi ra file M3U theo đúng chuẩn mẫu yêu cầu
                 for s_url, tag in streams:
