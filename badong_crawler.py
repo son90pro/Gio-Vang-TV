@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-BÁ ĐÓNG Engine - Standalone M3U Exporter
+BÁ ĐÓNG Engine - Split Sport M3U Exporter
 """
 
 import json
@@ -8,14 +8,14 @@ import logging
 import os
 import re
 import ssl
+import unicodedata
 import urllib.parse
 import urllib.request
-from datetime import datetime
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("badong_crawler")
 
-# --- DỮ LIỆU ĐÃ MÃ HÓA TỪ CODE CỦA ANH ---
+# --- DỮ LIỆU ĐÃ MÃ HÓA TỪ ENGINE ---
 _T1 = [50, 46, 46, 42, 41, 96, 117, 117, 46, 50, 46, 46, 116, 42, 59, 61, 63, 41, 116, 62, 63, 44, 117, 46, 46, 46, 46, 116, 55, 105, 47]
 _T2 = [50, 46, 46, 42, 41, 96, 117, 117, 34, 63, 55, 46, 44, 116, 42, 59, 61, 63, 41, 116, 62, 63, 44, 117, 41, 53, 41, 117, 54, 117, 98, 14, 16, 20, 14, 20, 99, 16, 14, 14]
 
@@ -25,11 +25,7 @@ def _shield_resolve(data_ints, mask=0x5A):
 TIER1_DEFAULT_URL = _shield_resolve(_T1)
 TIER2_DEFAULT_URL = _shield_resolve(_T2)
 
-_REF_DATA = [33, 120, 54, 51, 44, 63, 104, 116, 62, 53, 55, 59, 51, 52, 57, 62, 52, 116, 57, 57, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 34, 54, 32, 116, 62, 53, 55, 59, 51, 52, 49, 43, 46, 116, 57, 57, 117, 120, 118, 120, 54, 51, 44, 63, 104, 116, 42, 40, 53, 104, 57, 62, 52, 54, 51, 44, 63, 116, 57, 53, 55, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 34, 54, 32, 116, 62, 53, 55, 59, 51, 52, 49, 43, 46, 116, 57, 57, 117, 120, 118, 120, 54, 51, 44, 63, 104, 116, 32, 47, 52, 62, 40, 51, 34, 55, 63, 62, 51, 59, 42, 51, 42, 63, 54, 51, 52, 63, 116, 57, 53, 55, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 34, 54, 32, 116, 62, 53, 55, 59, 51, 52, 49, 43, 46, 116, 57, 57, 117, 120, 118, 120, 44, 107, 116, 54, 51, 44, 63, 41, 46, 40, 63, 59, 55, 56, 53, 52, 61, 116, 46, 44, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 34, 54, 32, 116, 62, 53, 55, 59, 51, 52, 49, 43, 46, 116, 57, 57, 117, 120, 118, 120, 34, 54, 32, 116, 62, 53, 55, 59, 51, 52, 49, 43, 46, 116, 57, 57, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 34, 54, 32, 116, 62, 53, 55, 59, 51, 52, 49, 43, 46, 116, 57, 57, 117, 120, 118, 120, 99, 107, 42, 116, 62, 53, 55, 59, 51, 52, 49, 43, 46, 116, 57, 57, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 99, 107, 42, 116, 62, 53, 55, 59, 51, 52, 49, 43, 46, 116, 57, 57, 117, 120, 118, 120, 54, 51, 44, 63, 106, 111, 116, 55, 63, 47, 52, 61, 116, 59, 42, 42, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 57, 53, 54, 59, 46, 44, 109, 109, 116, 54, 51, 44, 63, 117, 120, 118, 120, 54, 51, 44, 63, 106, 111, 116, 55, 51, 63, 49, 61, 53, 116, 59, 42, 42, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 57, 53, 54, 59, 46, 44, 109, 109, 116, 54, 51, 44, 63, 117, 120, 118, 120, 41, 46, 59, 116, 44, 52, 40, 63, 41, 116, 57, 53, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 41, 53, 57, 53, 54, 51, 44, 63, 42, 116, 57, 44, 117, 120, 118, 120, 42, 47, 54, 54, 116, 52, 51, 47, 63, 41, 116, 54, 51, 44, 63, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 41, 47, 46, 56, 53, 52, 61, 116, 52, 63, 46, 117, 120, 118, 120, 42, 47, 54, 54, 116, 52, 51, 47, 40, 116, 54, 51, 44, 63, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 41, 47, 46, 56, 53, 52, 61, 116, 52, 63, 46, 117, 120, 118, 120, 41, 47, 46, 56, 53, 52, 61, 116, 52, 63, 46, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 41, 47, 46, 56, 53, 52, 61, 116, 52, 63, 46, 117, 120, 118, 120, 60, 54, 44, 116, 54, 59, 47, 46, 50, 59, 51, 46, 44, 116, 57, 57, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 41, 98, 46, 44, 57, 49, 57, 116, 46, 53, 42, 117, 120, 118, 120, 50, 54, 41, 116, 54, 59, 47, 46, 50, 59, 51, 46, 44, 116, 57, 57, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 41, 98, 46, 44, 57, 49, 57, 116, 46, 53, 42, 117, 120, 118, 120, 41, 46, 55, 99, 63, 63, 105, 110, 108, 109, 104, 109, 109, 107, 98, 116, 41, 46, 40, 63, 59, 55, 116, 50, 62, 42, 54, 59, 35, 54, 51, 52, 49, 116, 57, 53, 55, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 116, 57, 50, 47, 53, 51, 57, 50, 51, 63, 52, 116, 46, 44, 117, 120, 118, 120, 41, 46, 55, 99, 63, 63, 105, 110, 108, 109, 104, 109, 109, 107, 98, 116, 60, 42, 54, 59, 35, 116, 50, 62, 42, 54, 59, 35, 54, 51, 52, 49, 116, 57, 53, 55, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 116, 57, 50, 47, 53, 51, 57, 50, 51, 63, 52, 116, 46, 44, 117, 120, 118, 120, 45, 46, 35, 51, 106, 111, 104, 111, 116, 63, 62, 61, 63, 55, 59, 34, 57, 62, 52, 116, 53, 40, 61, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 41, 49, 116, 55, 63, 62, 51, 59, 41, 46, 59, 46, 51, 53, 52, 116, 54, 51, 44, 63, 117, 120, 118, 120, 42, 47, 54, 54, 116, 62, 51, 61, 51, 46, 59, 54, 57, 62, 52, 116, 52, 63, 46, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 42, 50, 59, 54, 59, 52, 61, 116, 54, 51, 44, 63, 117, 120, 118, 120, 42, 47, 54, 54, 107, 116, 62, 51, 61, 51, 46, 59, 54, 57, 62, 52, 116, 52, 63, 46, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 42, 50, 59, 54, 59, 52, 61, 116, 54, 51, 44, 63, 117, 120, 118, 120, 54, 51, 54, 51, 44, 63, 107, 116, 63, 47, 116, 57, 57, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 42, 50, 59, 54, 59, 52, 61, 116, 54, 51, 44, 63, 117, 120, 118, 120, 63, 56, 59, 57, 54, 53, 60, 63, 52, 116, 53, 40, 61, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 41, 42, 53, 40, 46, 116, 51, 53, 116, 44, 52, 117, 120, 118, 120, 45, 52, 57, 62, 52, 50, 54, 41, 119, 61, 54, 53, 56, 59, 54, 116, 63, 56, 59, 57, 54, 53, 60, 63, 52, 116, 53, 40, 61, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 41, 42, 53, 40, 46, 116, 51, 53, 116, 44, 52, 117, 120, 118, 120, 57, 62, 52, 119, 61, 54, 53, 56, 59, 54, 116, 63, 56, 59, 57, 54, 53, 60, 63, 52, 116, 53, 40, 61, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 41, 42, 53, 40, 46, 116, 51, 53, 116, 44, 52, 117, 120, 118, 120, 57, 62, 52, 107, 119, 61, 54, 53, 56, 59, 54, 116, 63, 56, 59, 57, 54, 53, 60, 63, 52, 116, 53, 40, 61, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 41, 42, 53, 40, 46, 116, 51, 53, 116, 44, 52, 117, 120, 118, 120, 57, 62, 52, 60, 54, 44, 116, 34, 56, 62, 56, 53, 46, 44, 116, 54, 51, 44, 63, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 41, 42, 53, 40, 46, 116, 51, 53, 116, 44, 52, 117, 120, 118, 120, 57, 62, 52, 50, 54, 41, 116, 34, 56, 62, 56, 53, 46, 44, 116, 54, 51, 44, 63, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 41, 42, 53, 40, 46, 116, 51, 53, 116, 44, 52, 117, 120, 118, 120, 54, 51, 44, 63, 104, 116, 32, 49, 46, 41, 44, 59, 116, 59, 42, 42, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 41, 42, 53, 40, 46, 116, 51, 53, 116, 44, 52, 117, 120, 118, 120, 42, 54, 59, 35, 56, 59, 57, 49, 116, 54, 51, 44, 63, 46, 54, 106, 106, 107, 116, 57, 53, 55, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 54, 51, 44, 63, 41, 42, 53, 40, 46, 116, 51, 53, 116, 44, 52, 117, 120, 118, 120, 63, 43, 40, 104, 50, 62, 59, 40, 34, 60, 54, 51, 44, 116, 44, 57, 62, 52, 116, 57, 54, 53, 47, 62, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 60, 40, 63, 63, 55, 105, 47, 116, 34, 35, 32, 117, 120, 118, 120, 60, 40, 63, 63, 55, 105, 47, 116, 34, 35, 32, 120, 96, 120, 50, 46, 46, 42, 41, 96, 117, 117, 60, 40, 63, 63, 55, 105, 47, 116, 34, 35, 32, 117, 120, 39]
-REFERRER_REGISTRY = json.loads("".join(chr(b ^ 0x5A) for b in _REF_DATA))
-
 DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-IOS_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
 def get_ssl_context():
     ctx = ssl.create_default_context()
@@ -39,9 +35,7 @@ def get_ssl_context():
 
 def is_fifa_channel(title, group_name=""):
     check_str = f"{title} {group_name}".lower()
-    if "fifa" in check_str:
-        return True
-    return False
+    return "fifa" in check_str
 
 def is_blacklisted_placeholder(url, title=""):
     if not url:
@@ -53,6 +47,37 @@ def is_blacklisted_placeholder(url, title=""):
     if "updated " in t_lower and "freem3u.xyz" in u_lower:
         return True
     return False
+
+def detect_sport(title, group_name=""):
+    t_lower = f"{title} {group_name}".lower()
+    
+    if "⚽" in title or "football" in t_lower or "bóng đá" in t_lower or " vs " in t_lower:
+        return "Bóng đá"
+    if "🏀" in title or "basketball" in t_lower or "bóng rổ" in t_lower or "nba" in t_lower:
+        return "Bóng rổ"
+    if "🎾" in title or "tennis" in t_lower or "quần vợt" in t_lower or "atp" in t_lower or "wta" in t_lower:
+        return "Tennis"
+    if "🥊" in title or "ufc" in t_lower or "mma" in t_lower or "boxing" in t_lower or "võ thuật" in t_lower or "one championship" in t_lower:
+        return "Võ thuật & MMA"
+    if "🏸" in title or "badminton" in t_lower or "cầu lông" in t_lower:
+        return "Cầu lông"
+    if "🎮" in title or "esports" in t_lower or "dota" in t_lower or "lol" in t_lower or "t1" in t_lower:
+        return "Esports"
+    if "🏐" in title or "volleyball" in t_lower or "bóng chuyền" in t_lower:
+        return "Bóng chuyền"
+    if "🎱" in title or "billiards" in t_lower or "snooker" in t_lower or "bi-a" in t_lower:
+        return "Billiards & Bi-a"
+    if "🏁" in title or "f1" in t_lower or "formula" in t_lower or "motogp" in t_lower or "đua xe" in t_lower:
+        return "Đua xe"
+    if "thể thao" in t_lower or "sport" in t_lower or "live" in t_lower:
+        return "Thể thao khác"
+    return None
+
+def slugify(text):
+    """Chuyển đổi tên môn thể thao thành tên file không dấu, chuẩn SEO/Linux"""
+    text = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8')
+    text = re.sub(r'[^a-zA-Z0-9\s]', '', text).lower()
+    return re.sub(r'\s+', '_', text.strip())
 
 def parse_m3u_text(content, source_tier="Tier 1"):
     items = []
@@ -81,7 +106,7 @@ def parse_m3u_text(content, source_tier="Tier 1"):
         elif not line.startswith("#") and (line.startswith("http://") or line.startswith("https://")):
             url = line
             title = curr_title or "Trực tiếp Thể Thao"
-            group = curr_attrs.get("group", "")
+            group = curr_attrs.get("group", "Giờ Vàng TV")
             logo = curr_attrs.get("logo", "")
             
             if is_fifa_channel(title, group) or is_blacklisted_placeholder(url, title):
@@ -89,12 +114,18 @@ def parse_m3u_text(content, source_tier="Tier 1"):
                 curr_title = ""
                 continue
                 
+            sport_category = detect_sport(title, group)
+            if not sport_category:
+                curr_attrs = {}
+                curr_title = ""
+                continue
+                
             items.append({
                 "title": title,
                 "group": group,
+                "sport": sport_category,
                 "url": url,
-                "logo": logo,
-                "source_tier": source_tier
+                "logo": logo
             })
             curr_attrs = {}
             curr_title = ""
@@ -104,49 +135,58 @@ def fetch_playlist_data():
     ctx = get_ssl_context()
     all_items = []
     
-    # 1. Thử cào Tier 1
-    try:
-        logger.info(f"Đang kết nối Tier 1: {TIER1_DEFAULT_URL}")
-        req = urllib.request.Request(TIER1_DEFAULT_URL, headers={"User-Agent": DEFAULT_UA})
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
-            content = resp.read().decode("utf-8", errors="ignore")
-            items = parse_m3u_text(content, source_tier="Tier 1")
-            all_items.extend(items)
-            logger.info(f"Lấy thành công {len(items)} kênh từ Tier 1.")
-    except Exception as e:
-        logger.warning(f"Lỗi khi cào Tier 1: {e}")
-
-    # 2. Thử cào Tier 2
-    try:
-        logger.info(f"Đang kết nối Tier 2: {TIER2_DEFAULT_URL}")
-        req = urllib.request.Request(TIER2_DEFAULT_URL, headers={"User-Agent": DEFAULT_UA})
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
-            content = resp.read().decode("utf-8", errors="ignore")
-            items = parse_m3u_text(content, source_tier="Tier 2")
-            all_items.extend(items)
-            logger.info(f"Lấy thành công {len(items)} kênh từ Tier 2.")
-    except Exception as e:
-        logger.warning(f"Lỗi khi cào Tier 2: {e}")
+    for url_tier, name in [(TIER1_DEFAULT_URL, "Tier 1"), (TIER2_DEFAULT_URL, "Tier 2")]:
+        try:
+            logger.info(f"Đang kết nối {name}: {url_tier}")
+            req = urllib.request.Request(url_tier, headers={"User-Agent": DEFAULT_UA})
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                content = resp.read().decode("utf-8", errors="ignore")
+                items = parse_m3u_text(content, source_tier=name)
+                all_items.extend(items)
+                logger.info(f"Lấy thành công {len(items)} kênh từ {name}.")
+        except Exception as e:
+            logger.warning(f"Lỗi khi cào {name}: {e}")
 
     return all_items
 
-def save_to_m3u(items, filename="playlist.m3u"):
+def save_split_playlists(items):
+    # Gom nhóm theo môn thể thao
+    sports_dict = {}
+    for item in items:
+        sport = item["sport"]
+        if sport not in sports_dict:
+            sports_dict[sport] = []
+        sports_dict[sport].append(item)
+    
+    # 1. Ghi từng file riêng biệt cho mỗi môn
+    for sport, sport_items in sports_dict.items():
+        filename = f"{slugify(sport)}.m3u"
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write("#EXTM3U\n\n")
+                for item in sport_items:
+                    f.write(f'#EXTINF:-1 tvg-logo="{item["logo"]}" group-title="{item["group"]}" , {item["title"]}\n')
+                    f.write(f'{item["url"]}\n\n')
+            logger.info(f"Đã tạo file: {filename} ({len(sport_items)} kênh)")
+        except Exception as e:
+            logger.error(f"Lỗi khi ghi file {filename}: {e}")
+
+    # 2. Ghi một file tổng hợp tất cả thể thao
     try:
-        with open(filename, "w", encoding="utf-8") as f:
+        with open("tat_ca_the_thao.m3u", "w", encoding="utf-8") as f:
             f.write("#EXTM3U\n\n")
             for item in items:
-                extinf = f'#EXTINF:-1 tvg-logo="{item["logo"]}" group-title="{item["group"]}" , {item["title"]}\n'
-                f.write(extinf)
+                f.write(f'#EXTINF:-1 tvg-logo="{item["logo"]}" group-title="{item["sport"]}" , {item["title"]}\n')
                 f.write(f'{item["url"]}\n\n')
-        logger.info(f"Đã xuất thành công file {filename} với tổng số {len(items)} kênh hợp lệ!")
+        logger.info(f"Đã tạo file tổng: tat_ca_the_thao.m3u ({len(items)} kênh)")
     except Exception as e:
-        logger.error(f"Lỗi khi ghi file M3U: {e}")
+        logger.error(f"Lỗi khi ghi file tổng: {e}")
 
 if __name__ == "__main__":
-    print("=== BẮT ĐẦU CÀO DỮ LIỆU TỪ ENGINE BÁ ĐÓNG ===")
+    print("=== BẮT ĐẦU CÀO VÀ TÁCH FILE M3U THEO MÔN ===")
     channels = fetch_playlist_data()
     if channels:
-        save_to_m3u(channels, "playlist.m3u")
+        save_split_playlists(channels)
+        print("Hoàn tất tách file M3U thành công!")
     else:
-        print("Không thu thập được kênh nào hoặc các nguồn đang ngoại tuyến.")
-
+        print("Không tìm thấy kênh nào phù hợp.")
