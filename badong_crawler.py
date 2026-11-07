@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-BÁ ĐÓNG Engine - Split Sport M3U Exporter
+BÁ ĐÓNG Engine - Strict Sport M3U Exporter
 """
 
 import json
@@ -49,9 +49,14 @@ def is_blacklisted_placeholder(url, title=""):
     return False
 
 def detect_sport(title, group_name=""):
+    """Bộ lọc cực kỳ khắt khe: Chỉ nhận diện khi đúng tên môn thể thao hoặc cặp đấu."""
     t_lower = f"{title} {group_name}".lower()
     
-    if "⚽" in title or "football" in t_lower or "bóng đá" in t_lower or " vs " in t_lower:
+    # Loại trừ ngay lập tức nếu là các từ khóa phim ảnh hoặc kênh truyền hình tổng hợp không phải thể thao
+    if any(kw in t_lower for kw in ["movie", "phim", "HBO", "VTV", "VOV", "cartoon", "thời sự", "tin tức", "news"]):
+        return None
+
+    if "⚽" in title or "football" in t_lower or "bóng đá" in t_lower or " vs " in t_lower or "premier league" in t_lower or "la liga" in t_lower or "champions league" in t_lower:
         return "Bóng đá"
     if "🏀" in title or "basketball" in t_lower or "bóng rổ" in t_lower or "nba" in t_lower:
         return "Bóng rổ"
@@ -61,7 +66,7 @@ def detect_sport(title, group_name=""):
         return "Võ thuật & MMA"
     if "🏸" in title or "badminton" in t_lower or "cầu lông" in t_lower:
         return "Cầu lông"
-    if "🎮" in title or "esports" in t_lower or "dota" in t_lower or "lol" in t_lower or "t1" in t_lower:
+    if "🎮" in title or "esports" in t_lower or "dota" in t_lower or "lol" in t_lower or "t1" in t_lower or "liên minh" in t_lower:
         return "Esports"
     if "🏐" in title or "volleyball" in t_lower or "bóng chuyền" in t_lower:
         return "Bóng chuyền"
@@ -69,12 +74,11 @@ def detect_sport(title, group_name=""):
         return "Billiards & Bi-a"
     if "🏁" in title or "f1" in t_lower or "formula" in t_lower or "motogp" in t_lower or "đua xe" in t_lower:
         return "Đua xe"
-    if "thể thao" in t_lower or "sport" in t_lower or "live" in t_lower:
-        return "Thể thao khác"
+        
+    # TUYỆT ĐỐI KHÔNG nhận diện qua từ khóa "live" hay "thể thao" chung chung nữa để lọc sạch rác.
     return None
 
 def slugify(text):
-    """Chuyển đổi tên môn thể thao thành tên file không dấu, chuẩn SEO/Linux"""
     text = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8')
     text = re.sub(r'[^a-zA-Z0-9\s]', '', text).lower()
     return re.sub(r'\s+', '_', text.strip())
@@ -143,14 +147,13 @@ def fetch_playlist_data():
                 content = resp.read().decode("utf-8", errors="ignore")
                 items = parse_m3u_text(content, source_tier=name)
                 all_items.extend(items)
-                logger.info(f"Lấy thành công {len(items)} kênh từ {name}.")
+                logger.info(f"Lấy thành công {len(items)} kênh thể thao chuẩn từ {name}.")
         except Exception as e:
             logger.warning(f"Lỗi khi cào {name}: {e}")
 
     return all_items
 
 def save_split_playlists(items):
-    # Gom nhóm theo môn thể thao
     sports_dict = {}
     for item in items:
         sport = item["sport"]
@@ -158,7 +161,15 @@ def save_split_playlists(items):
             sports_dict[sport] = []
         sports_dict[sport].append(item)
     
-    # 1. Ghi từng file riêng biệt cho mỗi môn
+    # Xóa các file .m3u cũ trước khi ghi mới để tránh lưu sót file rác (như the_thao_khac.m3u)
+    for f_name in os.listdir("."):
+        if f_name.endswith(".m3u"):
+            try:
+                os.remove(f_name)
+            except:
+                pass
+
+    # Ghi từng file riêng biệt cho mỗi môn thể thao sạch
     for sport, sport_items in sports_dict.items():
         filename = f"{slugify(sport)}.m3u"
         try:
@@ -171,7 +182,7 @@ def save_split_playlists(items):
         except Exception as e:
             logger.error(f"Lỗi khi ghi file {filename}: {e}")
 
-    # 2. Ghi một file tổng hợp tất cả thể thao
+    # Ghi file tổng hợp chứa toàn bộ thể thao đã lọc sạch
     try:
         with open("tat_ca_the_thao.m3u", "w", encoding="utf-8") as f:
             f.write("#EXTM3U\n\n")
@@ -183,10 +194,10 @@ def save_split_playlists(items):
         logger.error(f"Lỗi khi ghi file tổng: {e}")
 
 if __name__ == "__main__":
-    print("=== BẮT ĐẦU CÀO VÀ TÁCH FILE M3U THEO MÔN ===")
+    print("=== BẮT ĐẦU CÀO VÀ LỌC THỂ THAO CHUYÊN SÂU ===")
     channels = fetch_playlist_data()
     if channels:
         save_split_playlists(channels)
-        print("Hoàn tất tách file M3U thành công!")
+        print("Hoàn tất lọc và tách file M3U thành công!")
     else:
-        print("Không tìm thấy kênh nào phù hợp.")
+        print("Không tìm thấy kênh thể thao nào phù hợp.")
