@@ -1,0 +1,17 @@
+#EXTM3U
+
+#EXTINF:-1 tvg-logo="https://img2.sport-tv-guide.live/images/tv-station-us-nba-tv-75.png" group-title="THỂ THAO QUỐC TẾ" , [LIVE] NBA
+https://live-pv-ta.amazon.fastly-edge.com/iad-nitro/live/clients/dash/enc/vgkshf22lc/out/v1/9dbd7e519cf34fe2a53a85ee85bc407f/cenc.mpd
+
+#EXTINF:-1 tvg-logo="" group-title="SPORTS" , NBA TV - NBALP
+https://ott.djdoolky76.io/api/streams/135/manifest.m3u8?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjIsInN0cmVhbVRva2VuIjoiOGVkOTY4MTIzODE2ZDQyY2U0Y2I5Y2E0YjBkNTI2ZTRlNDFmMDViZTY5MmE1ZjBjNTE3MjU1MjAwNTE3NWQ5OSIsImlhdCI6MTc4ODQ2MDY0OSwiZXhwIjoxNzkwNTUzNTk5fQ.zYZCDheDSp0BDnQTTnI7L54WiN5caPntzM3uPovHENM
+
+#EXTINF:-1 tvg-logo="" group-title="SPORTS" , NBA TV LOCAL
+http://23.237.104.106:8080/USA_NBA/tracks-v1a1/mono.m3u8
+
+#EXTINF:-1 tvg-logo="" group-title="SPORTS" , NBA TV Philippines
+https://ott.djdoolky76.io/api/streams/50/manifest.m3u8?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjIsInN0cmVhbVRva2VuIjoiOGVkOTY4MTIzODE2ZDQyY2U0Y2I5Y2E0YjBkNTI2ZTRlNDFmMDViZTY5MmE1ZjBjNTE3MjU1MjAwNTE3NWQ5OSIsImlhdCI6MTc4ODQ2MDY0OSwiZXhwIjoxNzkwNTUzNTk5fQ.zYZCDheDSp0BDnQTTnI7L54WiN5caPntzM3uPovHENM
+
+#EXTINF:-1 tvg-logo="https://img.sport-tv-guide.live/images/tv-station-us-nba-tv-75.png" group-title="THỂ THAO | ACE" , NBA TV FHD
+http://23.237.104.106:8080/USA_NBA/index.m3u8
+

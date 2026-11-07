@@ -1,0 +1,17 @@
+#EXTM3U
+
+#EXTINF:-1 tvg-logo="https://livesport.io.vn/logo/sport/sktennis.png" group-title="THỂ THAO QUỐC TẾ" , [LIVE] SKYSPORT TENNIS
+https://livesport.io.vn/ott/apo.php?id=skytennis
+
+#EXTINF:-1 tvg-logo="" group-title="SKY SPORTS" , Sky Sports Tennis 🇩🇪
+http://lb.wisp.cat/lb0/DE_Sky_Sport_Tennis_HD/video.m3u8?token=AUSnMTD
+
+#EXTINF:-1 tvg-logo="" group-title="SKY SPORTS" , Sky Sports Tennis 🇬🇧 (b2)
+http://7dcf4f9b.cbilant.com/iptv/9DBTL545SLHFHKACT8RS7P4R/6546/index.m3u8
+
+#EXTINF:-1 tvg-logo="" group-title="SKY SPORTS" , Sky Sports Tennis 🇬🇧 (b3)
+http://moilist.ottolok.net/iptv/FX8YANKAXDBBEM/6546/index.m3u8
+
+#EXTINF:-1 tvg-logo="" group-title="SPORTS" , Astro Tennis
+https://ott.djdoolky76.io/api/streams/176/manifest.m3u8?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjIsInN0cmVhbVRva2VuIjoiOGVkOTY4MTIzODE2ZDQyY2U0Y2I5Y2E0YjBkNTI2ZTRlNDFmMDViZTY5MmE1ZjBjNTE3MjU1MjAwNTE3NWQ5OSIsImlhdCI6MTc4ODQ2MDY0OSwiZXhwIjoxNzkwNTUzNTk5fQ.zYZCDheDSp0BDnQTTnI7L54WiN5caPntzM3uPovHENM
+

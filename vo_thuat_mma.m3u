@@ -1,0 +1,14 @@
+#EXTM3U
+
+#EXTINF:-1 tvg-logo="https://img2.sport-tv-guide.live/images/tv-station-ufc-ppv-stream-822.png" group-title="THỂ THAO QUỐC TẾ" , [LIVE] UFC
+https://live-pv-ta.amazon.fastly-edge.com/iad-nitro/live/clients/dash/enc/8mxwjnh2te/out/v1/356704796c0c4bed81f67cd3518d0c8a/cenc.mpd
+
+#EXTINF:-1 tvg-logo="" group-title="SPORTS" , UFC TV
+https://dbrb49pjoymg4.cloudfront.net/10001/99951134/hls/playlist.m3u8?ads.xumo_channelId=99951134
+
+#EXTINF:-1 tvg-logo="https://i.imgur.com/QhdxNsB.png" group-title="THỂ THAO TỔNG HỢP" , MMA-TV.com
+http://s70378.cdn.ngenix.net/m1_global/2/index.m3u8
+
+#EXTINF:-1 tvg-logo="https://img2.sport-tv-guide.live/images/tv-station-ufc-ppv-stream-822.png" group-title="THỂ THAO | ACE" , UFC FHD
+https://live-pv-ta.amazon.fastly-edge.com/iad-nitro/live/clients/dash/enc/8mxwjnh2te/out/v1/356704796c0c4bed81f67cd3518d0c8a/cenc.mpd
+

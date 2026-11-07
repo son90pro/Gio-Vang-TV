@@ -1,0 +1,20 @@
+#EXTM3U
+
+#EXTINF:-1 tvg-logo="https://img2.sport-tv-guide.live/images/tv-station-dazn-formula-1-366.png" group-title="THỂ THAO QUỐC TẾ" , [LIVE] DAZN F1
+https://livesport.io.vn/ott/viptv.php?id=daznf1
+
+#EXTINF:-1 tvg-logo="https://livesport.io.vn/logo/sport/f1tv.png" group-title="THỂ THAO QUỐC TẾ" , [LIVE] F1 TV
+https://otte.live.fly.ww.aiv-cdn.net/pdx-nitro/live/clients/dash/enc/n2io7mcgsm/out/v1/0977333c6f6b42aeb8df18de08f5586f/cenc.mpd
+
+#EXTINF:-1 tvg-logo="https://livesport.io.vn/logo/sport/sf1.png" group-title="THỂ THAO QUỐC TẾ" , [LIVE] SKY SPORTS F1
+https://livesport.io.vn/ott/viptv.php?id=skyf1
+
+#EXTINF:-1 tvg-logo="https://livesport.io.vn/logo/sport/sportf1.png" group-title="THỂ THAO QUỐC TẾ" , [LIVE] SKYSPORT F1
+https://livesport.io.vn/ott/apo.php?id=skyf1
+
+#EXTINF:-1 tvg-logo="" group-title="SKY SPORTS" , Sky Sports F1 🇬🇧 (b2)
+http://7dcf4f9b.cbilant.com/iptv/9DBTL545SLHFHKACT8RS7P4R/9283/index.m3u8
+
+#EXTINF:-1 tvg-logo="" group-title="SKY SPORTS" , Sky Sports F1 🇬🇧 (b3)
+http://moilist.ottolok.net/iptv/FX8YANKAXDBBEM/9283/index.m3u8
+
